@@ -1,0 +1,193 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="theme-color" content="#0a0a0a" />
+  <title>Mzala — Admin Console</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="css/styles.css">
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+</head>
+<body>
+  <header>Mzala<span>.</span> Admin</header>
+
+  <div class="container">
+
+    <!-- ===== DRIVERS CARD ===== -->
+    <section class="card">
+      <h2 class="card-title">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87"/><path d="M16 3.13a4 4 0 010 7.75"/></svg>
+        Drivers
+      </h2>
+      <div class="add-driver-row">
+        <input id="driverName" class="input" placeholder="Driver name" />
+        <button id="addDriverBtn" class="btn-primary">Add driver</button>
+      </div>
+      <div id="driversList" class="drivers-list">Loading drivers…</div>
+    </section>
+
+    <!-- ===== GEOFENCE CARD ===== -->
+    <section class="card">
+      <div class="card-header">
+        <h2 class="card-title">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="3"/></svg>
+          Geofence Zone
+        </h2>
+        <span id="fenceStatus" class="status-pill off">
+          <span class="status-dot"></span> Off
+        </span>
+      </div>
+
+      <!-- On / Off toggle -->
+      <div class="toggle-row">
+        <div class="toggle-info">
+          <span class="toggle-title">Enable geofence</span>
+          <span class="toggle-sub">Riders outside the zone can't request rides</span>
+        </div>
+        <label class="switch">
+          <input type="checkbox" id="fenceToggle" />
+          <span class="slider"></span>
+        </label>
+      </div>
+
+      <!-- Map -->
+      <div id="fenceMap" class="fence-map"></div>
+
+      <!-- Controls -->
+      <div class="fence-controls">
+        <div class="fence-row">
+          <span class="field-label">Service zone (km)</span>
+          <div class="radius-control">
+            <button id="radiusMinus" class="radius-btn">−</button>
+            <input type="number" id="radiusInput" class="radius-input" value="10" min="1" max="500" step="1" />
+            <button id="radiusPlus" class="radius-btn">+</button>
+          </div>
+        </div>
+
+        <div class="fence-row">
+          <span class="field-label">Max trip distance (km)</span>
+          <div class="radius-control">
+            <button id="maxTripMinus" class="radius-btn">−</button>
+            <input type="number" id="maxTripInput" class="radius-input" value="50" min="1" max="500" step="1" />
+            <button id="maxTripPlus" class="radius-btn">+</button>
+          </div>
+        </div>
+
+        <div class="fence-row coords-row">
+          <span id="fenceCoords" class="coords-text">Click map to set center</span>
+        </div>
+
+        <div class="fence-row fence-actions">
+          <button id="fenceSaveBtn" class="btn-primary" style="flex:1">Save zone</button>
+          <button id="fenceResetBtn" class="btn-outline">Reset</button>
+        </div>
+
+        <div id="fenceMsg" class="panel-msg hidden"></div>
+      </div>
+    </section>
+
+    <!-- ===== PRICING CARD ===== -->
+    <section class="card">
+      <h2 class="card-title">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6"/></svg>
+        Pricing
+      </h2>
+
+      <div class="fence-controls">
+        <div class="fence-row">
+          <span class="field-label">Normal price (day) pp</span>
+          <div class="radius-control">
+            <span class="currency-label">R</span>
+            <input type="number" id="priceNormalDay" class="radius-input" value="20" min="1" max="999" step="1" />
+          </div>
+        </div>
+        <div class="fence-row">
+          <span class="field-label">Normal price (night) pp</span>
+          <div class="radius-control">
+            <span class="currency-label">R</span>
+            <input type="number" id="priceNormalNight" class="radius-input" value="30" min="1" max="999" step="1" />
+          </div>
+        </div>
+        <div class="fence-row">
+          <span class="field-label">Hike zone price (day) pp</span>
+          <div class="radius-control">
+            <span class="currency-label">R</span>
+            <input type="number" id="priceHikeDay" class="radius-input" value="35" min="1" max="999" step="1" />
+          </div>
+        </div>
+        <div class="fence-row">
+          <span class="field-label">Hike zone price (night) pp</span>
+          <div class="radius-control">
+            <span class="currency-label">R</span>
+            <input type="number" id="priceHikeNight" class="radius-input" value="50" min="1" max="999" step="1" />
+          </div>
+        </div>
+        <div class="fence-row">
+          <span class="field-label">Night starts at (hour, 0–23)</span>
+          <div class="radius-control">
+            <input type="number" id="priceNightHour" class="radius-input" value="22" min="0" max="23" step="1" />
+          </div>
+        </div>
+
+        <div class="fence-row fence-actions">
+          <button id="priceSaveBtn" class="btn-primary" style="flex:1">Save pricing</button>
+          <button id="priceResetBtn" class="btn-outline">Reset</button>
+        </div>
+        <div id="priceMsg" class="panel-msg hidden"></div>
+      </div>
+    </section>
+
+    <!-- ===== PRICE HIKE ZONES CARD ===== -->
+    <section class="card">
+      <h2 class="card-title">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+        Price Hike Zones
+      </h2>
+      <p class="card-sub">Click the map to place a hike zone center, set a radius, then add it. Passengers booking from inside a hike zone pay increased rates.</p>
+
+      <div id="hikeMap" class="fence-map"></div>
+
+      <div class="fence-controls">
+        <div class="fence-row">
+          <span class="field-label">Zone radius (km)</span>
+          <div class="radius-control">
+            <button id="hikeRadiusMinus" class="radius-btn">−</button>
+            <input type="number" id="hikeRadiusInput" class="radius-input" value="5" min="1" max="100" step="1" />
+            <button id="hikeRadiusPlus" class="radius-btn">+</button>
+          </div>
+        </div>
+        <div class="fence-row coords-row">
+          <span id="hikeCoords" class="coords-text">Click map to set zone center</span>
+        </div>
+        <div class="fence-row fence-actions">
+          <button id="hikeAddBtn" class="btn-primary" style="flex:1">Add zone</button>
+        </div>
+        <div id="hikeMsg" class="panel-msg hidden"></div>
+      </div>
+
+      <div id="hikeZonesList" class="hike-zones-list"></div>
+    </section>
+
+  </div>
+
+  <!-- ===== LOCATE DRIVER POPUP ===== -->
+  <div id="locateOverlay" class="locate-overlay hidden">
+    <div class="locate-sheet">
+      <div class="locate-header">
+        <h3 id="locateName">Driver</h3>
+        <button id="locateClose" class="locate-close">&times;</button>
+      </div>
+      <div id="locateMap" class="locate-map"></div>
+      <p id="locateInfo" class="locate-info"></p>
+    </div>
+  </div>
+
+  <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-database-compat.js"></script>
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script src="js/admin.js"></script>
+</body>
+</html>

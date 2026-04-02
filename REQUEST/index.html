@@ -1,0 +1,165 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="theme-color" content="#000000" />
+  <title>Mzala — Request a Ride</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="css/styles.css">
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🚗</text></svg>" />
+</head>
+<body>
+
+  <!-- ===== LANDING SCREEN ===== -->
+  <div id="landing">
+    <div class="landing-content">
+      <h1 class="landing-brand">Mzala<span>.</span></h1>
+      <p class="landing-tagline">Where are you going?</p>
+      <p class="landing-sub">We'll find your location and connect you with a nearby driver.</p>
+      <button id="bookBtn" class="landing-btn">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0118 0z"/><circle cx="12" cy="10" r="3"/></svg>
+        Find my location
+      </button>
+    </div>
+  </div>
+
+  <!-- ===== TOP BAR (after map loads) ===== -->
+  <header id="topbar" class="hidden">
+    <div class="topbar-left">
+      <h1 class="brand">Mzala<span>.</span></h1>
+    </div>
+    <div class="topbar-right">
+      <button id="locateBtn" class="topbar-icon-btn" title="Center map on your location">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="3"/><line x1="12" y1="2" x2="12" y2="6"/><line x1="12" y1="18" x2="12" y2="22"/><line x1="2" y1="12" x2="6" y2="12"/><line x1="18" y1="12" x2="22" y2="12"/></svg>
+      </button>
+    </div>
+  </header>
+
+  <!-- ===== LOCATION LOADER ===== -->
+  <div id="locLoader" class="hidden">
+    <div class="loc-loader-inner">
+      <img src="icon.png" alt="Loading" class="loc-loader-icon" />
+      <p class="loc-loader-text">Finding your location…</p>
+    </div>
+  </div>
+
+  <!-- ===== MAP ===== -->
+  <div id="map" class="hidden"></div>
+
+  <!-- ===== MAP HINT BANNER ===== -->
+  <div id="mapHint" class="hidden" aria-live="polite">
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
+    Tap the map to set your destination
+  </div>
+
+  <!-- ===== STATUS BAR ===== -->
+  <div id="status" class="hidden" aria-live="polite"></div>
+
+  <!-- ===== RIDE PANEL (bottom sheet) — multi-step booking ===== -->
+  <div id="ridePanel" class="hidden" role="region" aria-label="Ride details">
+    <div class="ride-handle"></div>
+
+    <!-- Step 1: Route info + add stop / continue -->
+    <div id="bookingStep1">
+      <div class="ride-info-row">
+        <div class="ride-stat">
+          <span class="ride-stat-value" id="rideDistance">—</span>
+          <span class="ride-stat-label">km</span>
+        </div>
+        <div class="ride-divider"></div>
+        <div class="ride-stat">
+          <span class="ride-stat-value" id="rideDuration">—</span>
+          <span class="ride-stat-label">min</span>
+        </div>
+      </div>
+      <div id="stopsInfo" class="stops-info hidden">
+        <span id="stopsCount">1 stop</span>
+      </div>
+      <div class="ride-actions">
+        <button id="addStopBtn" class="ride-addstop-btn">+ Add another stop</button>
+        <button id="continueBtn" class="ride-continue-btn">Continue</button>
+        <button id="clearRouteBtn" class="ride-clear-btn">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </button>
+      </div>
+    </div>
+
+    <!-- Step 2: How many passengers -->
+    <div id="bookingStep2" class="hidden">
+      <h3 class="step-title">How many passengers?</h3>
+      <div class="passenger-selector">
+        <button class="passenger-pill selected" data-count="1">
+          <span class="passenger-pill-icon">🧑</span>
+          <span>Just me</span>
+        </button>
+        <button class="passenger-pill" data-count="2">
+          <span class="passenger-pill-icon">🧑‍🤝‍🧑</span>
+          <span>Me + 1</span>
+        </button>
+        <button class="passenger-pill" data-count="3">
+          <span class="passenger-pill-icon">👨‍👩‍👦</span>
+          <span>Me + 2</span>
+        </button>
+      </div>
+      <div class="step2-actions">
+        <button id="step2BackBtn" class="ride-back-btn">← Back</button>
+        <button id="step2ContinueBtn" class="ride-continue-btn" style="flex:1">Continue</button>
+      </div>
+    </div>
+
+    <!-- Step 3: Book ride with price -->
+    <div id="bookingStep3" class="hidden">
+      <div class="price-summary">
+        <div class="price-line">
+          <span class="price-label" id="pricePaxLabel">1 × R20</span>
+          <span class="price-badge" id="priceZoneBadge" style="display:none">HIKE ZONE</span>
+        </div>
+        <div class="price-total" id="priceTotalDisplay">R20</div>
+      </div>
+      <div class="book-btn-wrap">
+        <button id="bookRideBtn" class="book-ride-btn">
+          <span>Book Ride</span>
+        </button>
+      </div>
+      <div class="step3-actions">
+        <button id="step3BackBtn" class="ride-back-btn">← Back</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== ACCOUNT MODAL ===== -->
+  <div id="accountModal" class="modal-overlay hidden">
+    <div class="modal-sheet">
+      <div class="modal-handle"></div>
+      <div class="modal-logo">M<span>.</span></div>
+      <h2 id="accountTitle">Create your account</h2>
+      <p class="modal-sub">Enter a username and phone number to get started.</p>
+      <form id="accountForm" class="modal-form" autocomplete="off">
+        <input type="text" id="accUsername" placeholder="Username" required minlength="2" maxlength="30" />
+        <input type="tel" id="accPhone" placeholder="Phone number" required minlength="7" maxlength="20" />
+        <div id="accError" class="acc-error hidden"></div>
+        <button type="submit" class="btn-solid" id="accSubmitBtn">Create account</button>
+      </form>
+      <div id="accLoggedIn" class="acc-logged-in hidden">
+        <p>Signed in as <strong id="accDisplayName"></strong></p>
+        <button id="accLogout" class="btn-text">Sign out</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== ACCOUNT BADGE ===== -->
+  <div id="accountBadge" class="account-badge hidden">
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+    <span id="badgeName"></span>
+  </div>
+
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script type="module" src="js/app.js"></script>
+</body>
+</html>

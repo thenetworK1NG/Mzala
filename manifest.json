@@ -1,0 +1,17 @@
+{
+  "name": "Mzala",
+  "short_name": "Mzala",
+  "description": "We don't build the future, we engineer it.",
+  "start_url": "./index.html",
+  "display": "standalone",
+  "background_color": "#0a0a0a",
+  "theme_color": "#06c167",
+  "icons": [
+    {
+      "src": "REQUEST/icon.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}

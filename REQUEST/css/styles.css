@@ -1,0 +1,819 @@
+/* ============================================
+   Mzala Rider — Mobile-First Premium UI
+   ============================================ */
+
+:root {
+  --black: #000000;
+  --bg: #0a0a0a;
+  --surface: #141414;
+  --surface-2: #1c1c1e;
+  --surface-3: #2c2c2e;
+  --surface-hover: #3a3a3c;
+  --border: rgba(255,255,255,0.08);
+  --border-light: rgba(255,255,255,0.14);
+  --text: #ffffff;
+  --text-2: #c7c7cc;
+  --text-muted: #636366;
+  --green: #06c167;
+  --green-dark: #05a057;
+  --green-glow: rgba(6,193,103,0.15);
+  --red: #e11900;
+  --accent: #276ef1;
+  --radius: 16px;
+  --radius-sm: 12px;
+  --radius-xs: 8px;
+  --pill: 999px;
+  --font: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  --spring: cubic-bezier(0.16, 1, 0.3, 1);
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+html {
+  height: 100%;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  -webkit-tap-highlight-color: transparent;
+}
+
+body {
+  height: 100%;
+  font-family: var(--font);
+  background: var(--bg);
+  color: var(--text);
+  line-height: 1.5;
+  display: flex;
+  flex-direction: column;
+  font-size: 16px;
+  overflow-x: hidden;
+}
+
+::-webkit-scrollbar { width: 4px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.12); border-radius: 2px; }
+
+/* =============================================
+   LOCATION LOADER
+   ============================================= */
+#locLoader {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--bg);
+}
+.loc-loader-inner {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 20px;
+  animation: fade-up 0.5s ease;
+}
+.loc-loader-icon {
+  width: 90px;
+  height: 90px;
+  animation: loc-spin 1.8s ease-in-out infinite;
+}
+.loc-loader-text {
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: var(--muted);
+  letter-spacing: 0.02em;
+}
+@keyframes loc-spin {
+  0%   { transform: rotate(0deg) scale(1); }
+  25%  { transform: rotate(90deg) scale(1.08); }
+  50%  { transform: rotate(180deg) scale(1); }
+  75%  { transform: rotate(270deg) scale(1.08); }
+  100% { transform: rotate(360deg) scale(1); }
+}
+#locLoader.loc-done .loc-loader-icon {
+  animation: loc-land 0.5s ease forwards;
+}
+#locLoader.loc-done .loc-loader-text {
+  transition: opacity 0.3s;
+  opacity: 0;
+}
+@keyframes loc-land {
+  0%   { transform: rotate(360deg) scale(1); }
+  50%  { transform: rotate(360deg) scale(1.15); }
+  100% { transform: rotate(360deg) scale(1); opacity: 0; }
+}
+
+/* =============================================
+   LANDING SCREEN
+   ============================================= */
+#landing {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100vh;
+  padding: 48px 24px;
+  background: var(--bg);
+  position: relative;
+  overflow: hidden;
+}
+
+/* Subtle radial glow behind content */
+#landing::before {
+  content: '';
+  position: absolute;
+  width: 300px;
+  height: 300px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(6,193,103,0.08) 0%, transparent 70%);
+  top: 30%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+}
+
+.landing-content {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+  text-align: center;
+  position: relative;
+  z-index: 1;
+  max-width: 340px;
+  animation: fade-up 0.6s var(--spring);
+}
+
+@keyframes fade-up {
+  from { opacity: 0; transform: translateY(20px); }
+  to { opacity: 1; transform: none; }
+}
+
+.landing-brand {
+  font-size: 2.8rem;
+  font-weight: 900;
+  letter-spacing: -1px;
+  color: var(--text);
+  margin-bottom: 8px;
+}
+.landing-brand span { color: var(--green); }
+
+.landing-tagline {
+  font-size: 1.3rem;
+  font-weight: 700;
+  color: var(--text);
+  letter-spacing: -0.3px;
+}
+
+.landing-sub {
+  font-size: 0.88rem;
+  color: var(--text-muted);
+  line-height: 1.6;
+  max-width: 300px;
+  margin-bottom: 12px;
+}
+
+.landing-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  width: 100%;
+  padding: 16px 24px;
+  font-family: var(--font);
+  font-size: 1rem;
+  font-weight: 700;
+  border-radius: var(--radius-sm);
+  background: var(--text);
+  color: var(--black);
+  border: none;
+  cursor: pointer;
+  transition: background 0.15s, transform 0.1s;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.landing-btn:active { transform: scale(0.97); background: #e0e0e0; }
+
+/* =============================================
+   TOP BAR
+   ============================================= */
+#topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 16px;
+  height: 56px;
+  background: var(--black);
+  border-bottom: 1px solid var(--border);
+  z-index: 1000;
+  flex-shrink: 0;
+}
+
+.topbar-left { display: flex; align-items: center; }
+.topbar-right { display: flex; align-items: center; gap: 8px; }
+
+.brand {
+  font-size: 1.3rem;
+  font-weight: 800;
+  letter-spacing: -0.5px;
+  color: var(--text);
+}
+.brand span { color: var(--green); }
+
+.topbar-icon-btn {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  color: var(--text);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.topbar-icon-btn:active { background: var(--surface-3); }
+
+/* =============================================
+   MAP
+   ============================================= */
+#map {
+  flex: 1 1 auto;
+  min-height: 220px;
+  width: 100%;
+}
+
+/* =============================================
+   MAP HINT BANNER
+   ============================================= */
+#mapHint {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 10px 16px;
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: var(--text-2);
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  text-align: center;
+  letter-spacing: -0.1px;
+}
+
+#mapHint svg { opacity: 0.5; flex-shrink: 0; }
+
+/* =============================================
+   STATUS BAR
+   ============================================= */
+#status {
+  padding: 10px 16px;
+  font-size: 0.82rem;
+  font-weight: 500;
+  background: var(--surface);
+  border-top: 1px solid var(--border);
+  color: var(--text-muted);
+}
+
+/* =============================================
+   RIDE PANEL (bottom sheet style)
+   ============================================= */
+#ridePanel {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: var(--surface);
+  border-radius: 24px 24px 0 0;
+  border-top: 1px solid var(--border-light);
+  padding: 8px 20px 20px;
+  padding-bottom: calc(20px + var(--safe-bottom));
+  z-index: 1200;
+  box-shadow: 0 -8px 40px rgba(0,0,0,0.5);
+  animation: sheet-up 0.4s var(--spring);
+}
+
+@keyframes sheet-up {
+  from { transform: translateY(100%); }
+  to { transform: translateY(0); }
+}
+
+.ride-handle {
+  width: 36px;
+  height: 4px;
+  border-radius: 2px;
+  background: var(--surface-3);
+  margin: 0 auto 16px;
+}
+
+.ride-info-row {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 24px;
+  margin-bottom: 20px;
+}
+
+.ride-stat {
+  display: flex;
+  align-items: baseline;
+  gap: 4px;
+}
+
+.ride-stat-value {
+  font-size: 1.6rem;
+  font-weight: 800;
+  color: var(--text);
+  letter-spacing: -0.5px;
+}
+
+.ride-stat-label {
+  font-size: 0.82rem;
+  font-weight: 500;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.ride-divider {
+  width: 1px;
+  height: 28px;
+  background: var(--border-light);
+}
+
+.ride-actions {
+  display: flex;
+  gap: 10px;
+}
+
+.ride-request-btn {
+  flex: 1;
+  padding: 16px;
+  border-radius: var(--radius-sm);
+  border: none;
+  background: var(--text);
+  color: var(--black);
+  font-family: var(--font);
+  font-size: 1rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background 0.15s, transform 0.1s;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.ride-request-btn:active { transform: scale(0.97); background: #e0e0e0; }
+
+.ride-request-btn:disabled {
+  background: var(--green);
+  color: #fff;
+  cursor: default;
+  transform: none;
+}
+
+.ride-clear-btn {
+  width: 52px;
+  height: 52px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  background: var(--surface-2);
+  color: var(--text-muted);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: background 0.15s;
+  flex-shrink: 0;
+}
+
+.ride-clear-btn:active { background: var(--surface-3); }
+
+/* =============================================
+   MULTI-STEP BOOKING FLOW
+   ============================================= */
+
+/* Stops info badge */
+.stops-info {
+  text-align: center;
+  margin-bottom: 14px;
+}
+.stops-info span {
+  display: inline-block;
+  padding: 4px 14px;
+  border-radius: var(--pill);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--text-2);
+  letter-spacing: 0.2px;
+}
+
+/* Add stop & continue buttons */
+.ride-addstop-btn {
+  flex: 1;
+  padding: 14px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-light);
+  background: var(--surface-2);
+  color: var(--text-2);
+  font-family: var(--font);
+  font-size: 0.9rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.ride-addstop-btn:active { background: var(--surface-3); }
+
+.ride-continue-btn {
+  flex: 1;
+  padding: 14px;
+  border-radius: var(--radius-sm);
+  border: none;
+  background: var(--text);
+  color: var(--black);
+  font-family: var(--font);
+  font-size: 0.95rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background 0.15s, transform 0.1s;
+}
+.ride-continue-btn:active { transform: scale(0.97); background: #e0e0e0; }
+
+.ride-back-btn {
+  padding: 12px 18px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  background: var(--surface-2);
+  color: var(--text-muted);
+  font-family: var(--font);
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.ride-back-btn:active { background: var(--surface-3); }
+
+/* Step title */
+.step-title {
+  font-size: 1.1rem;
+  font-weight: 800;
+  color: var(--text);
+  text-align: center;
+  margin-bottom: 20px;
+  letter-spacing: -0.3px;
+}
+
+/* Passenger selector */
+.passenger-selector {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 20px;
+}
+
+.passenger-pill {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 16px 8px;
+  border-radius: var(--radius-sm);
+  border: 2px solid var(--border-light);
+  background: var(--surface-2);
+  color: var(--text-2);
+  font-family: var(--font);
+  font-size: 0.82rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: border-color 0.2s, background 0.2s, transform 0.1s;
+}
+
+.passenger-pill:active { transform: scale(0.96); }
+
+.passenger-pill.selected {
+  border-color: var(--green);
+  background: var(--green-glow);
+  color: var(--text);
+}
+
+.passenger-pill-icon {
+  font-size: 1.4rem;
+}
+
+.step2-actions {
+  display: flex;
+  gap: 10px;
+}
+
+/* Step 3: price summary + book button */
+.price-summary {
+  text-align: center;
+  margin-bottom: 20px;
+}
+
+.price-line {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.price-label {
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: var(--text-2);
+}
+
+.price-badge {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: var(--pill);
+  background: rgba(230,126,34,0.15);
+  color: #e67e22;
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+}
+
+.price-total {
+  font-size: 2.2rem;
+  font-weight: 900;
+  color: var(--text);
+  letter-spacing: -1px;
+}
+
+.book-btn-wrap {
+  display: flex;
+  justify-content: center;
+  margin-bottom: 16px;
+}
+
+.book-ride-btn {
+  width: 120px;
+  height: 120px;
+  border-radius: 50%;
+  border: none;
+  background: var(--green);
+  color: #fff;
+  font-family: var(--font);
+  font-size: 1.05rem;
+  font-weight: 800;
+  cursor: pointer;
+  box-shadow: 0 6px 28px rgba(6,193,103,0.35);
+  transition: transform 0.15s, box-shadow 0.15s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.book-ride-btn:active { transform: scale(0.93); box-shadow: 0 2px 12px rgba(6,193,103,0.25); }
+.book-ride-btn:disabled {
+  background: var(--surface-3);
+  color: var(--text-muted);
+  box-shadow: none;
+  cursor: default;
+  transform: none;
+}
+
+.step3-actions {
+  display: flex;
+  justify-content: center;
+}
+
+/* =============================================
+   ACCOUNT MODAL (bottom sheet)
+   ============================================= */
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.6);
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  z-index: 3000;
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  animation: fade-in 0.2s ease;
+}
+
+@keyframes fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.modal-sheet {
+  background: var(--surface);
+  width: 100%;
+  max-width: 420px;
+  border-radius: 24px 24px 0 0;
+  padding: 12px 24px 32px;
+  padding-bottom: calc(32px + var(--safe-bottom));
+  text-align: center;
+  animation: sheet-up 0.4s var(--spring);
+  border-top: 1px solid var(--border-light);
+}
+
+.modal-handle {
+  width: 36px;
+  height: 4px;
+  border-radius: 2px;
+  background: var(--surface-3);
+  margin: 0 auto 24px;
+}
+
+.modal-logo {
+  font-size: 2rem;
+  font-weight: 900;
+  color: var(--text);
+  margin-bottom: 8px;
+}
+.modal-logo span { color: var(--green); }
+
+.modal-sheet h2 {
+  font-size: 1.25rem;
+  font-weight: 800;
+  color: var(--text);
+  margin-bottom: 4px;
+  letter-spacing: -0.3px;
+}
+
+.modal-sub {
+  font-size: 0.85rem;
+  color: var(--text-muted);
+  margin-bottom: 24px;
+  line-height: 1.5;
+}
+
+.modal-form {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.modal-form input {
+  width: 100%;
+  padding: 16px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-light);
+  font-family: var(--font);
+  font-size: 1rem;
+  font-weight: 500;
+  color: var(--text);
+  background: var(--surface-2);
+  outline: none;
+  transition: border-color 0.15s;
+}
+
+.modal-form input::placeholder { color: var(--text-muted); }
+
+.modal-form input:focus {
+  border-color: var(--green);
+  box-shadow: 0 0 0 3px var(--green-glow);
+}
+
+/* Solid button */
+.btn-solid {
+  width: 100%;
+  padding: 16px;
+  border-radius: var(--radius-sm);
+  border: none;
+  background: var(--text);
+  color: var(--black);
+  font-family: var(--font);
+  font-size: 1rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background 0.15s, transform 0.1s;
+}
+.btn-solid:active { transform: scale(0.97); background: #e0e0e0; }
+.btn-solid:disabled { background: var(--surface-3); color: var(--text-muted); cursor: default; transform: none; }
+
+/* Text button */
+.btn-text {
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  font-family: var(--font);
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 10px;
+}
+.btn-text:active { color: var(--text-2); }
+
+/* Error */
+.acc-error {
+  font-size: 0.82rem;
+  color: var(--red);
+  background: rgba(225,25,0,0.08);
+  border: 1px solid rgba(225,25,0,0.2);
+  padding: 12px;
+  border-radius: var(--radius-xs);
+  text-align: left;
+}
+
+/* Logged in state */
+.acc-logged-in {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+}
+
+.acc-logged-in p {
+  margin: 0;
+  font-size: 0.95rem;
+  color: var(--text-2);
+}
+
+/* =============================================
+   ACCOUNT BADGE
+   ============================================= */
+.account-badge {
+  position: fixed;
+  top: 68px;
+  right: 12px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 14px;
+  border-radius: var(--pill);
+  background: var(--surface);
+  color: var(--text);
+  font-weight: 600;
+  font-size: 0.78rem;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.4);
+  border: 1px solid var(--border);
+  cursor: pointer;
+  z-index: 1100;
+  transition: background 0.15s;
+}
+
+.account-badge:active { background: var(--surface-3); }
+
+/* When on landing, position from top */
+#topbar.hidden ~ .account-badge { top: 12px; }
+
+/* =============================================
+   TOAST
+   ============================================= */
+.toast {
+  position: fixed;
+  left: 50%;
+  transform: translateX(-50%);
+  bottom: calc(24px + var(--safe-bottom));
+  background: var(--surface);
+  color: var(--text);
+  padding: 14px 24px;
+  border-radius: var(--pill);
+  box-shadow: 0 8px 32px rgba(0,0,0,0.5);
+  border: 1px solid var(--border);
+  z-index: 5000;
+  font-size: 0.88rem;
+  font-weight: 600;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.25s ease, transform 0.25s ease;
+  white-space: nowrap;
+}
+
+.toast.show {
+  opacity: 1;
+  transform: translateX(-50%) translateY(-8px);
+  pointer-events: auto;
+}
+
+/* =============================================
+   UTILITY
+   ============================================= */
+.hidden { display: none !important; }
+
+/* =============================================
+   DESKTOP
+   ============================================= */
+@media (min-width: 768px) {
+  #topbar { height: 64px; padding: 0 32px; }
+  .brand { font-size: 1.5rem; }
+
+  #ridePanel {
+    left: auto;
+    right: 24px;
+    bottom: 24px;
+    width: 380px;
+    border-radius: var(--radius);
+    padding: 20px 24px 24px;
+  }
+
+  .ride-handle { display: none; }
+
+  .modal-sheet {
+    border-radius: 24px;
+    margin-bottom: 40px;
+    max-width: 400px;
+  }
+
+  .landing-brand { font-size: 3.5rem; }
+  .landing-tagline { font-size: 1.5rem; }
+  .landing-content { max-width: 400px; }
+  .landing-btn { max-width: 320px; }
+}

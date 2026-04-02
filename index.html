@@ -1,0 +1,281 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no"/>
+  <meta name="theme-color" content="#06c167"/>
+  <meta name="apple-mobile-web-app-capable" content="yes"/>
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
+  <link rel="manifest" href="manifest.json"/>
+  <link rel="icon" href="REQUEST/icon.png"/>
+  <link rel="apple-touch-icon" href="REQUEST/icon.png"/>
+  <title>Mzala</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet"/>
+  <style>
+    *,*::before,*::after{margin:0;padding:0;box-sizing:border-box}
+    :root{
+      --bg:#0a0a0a;--surface:#141414;--border:#1e1e1e;
+      --green:#06c167;--green-dim:rgba(6,193,103,.12);
+      --text:#f5f5f5;--muted:#888;
+    }
+    html,body{height:100%;font-family:'Inter',system-ui,sans-serif;background:var(--bg);color:var(--text);overflow:hidden}
+
+    /* ========== INTRO ========== */
+    #intro{
+      position:fixed;inset:0;z-index:100;display:flex;align-items:center;justify-content:center;
+      background:var(--bg);
+    }
+    #intro.done{animation:introOut .6s .1s ease forwards}
+    @keyframes introOut{to{opacity:0;pointer-events:none}}
+
+    .intro-icon{
+      width:110px;height:110px;
+      animation:iconEntry .9s cubic-bezier(.22,1,.36,1) both;
+    }
+    @keyframes iconEntry{
+      0%{opacity:0;transform:scale(.4) rotate(-20deg)}
+      60%{opacity:1;transform:scale(1.08) rotate(4deg)}
+      100%{transform:scale(1) rotate(0)}
+    }
+
+    .intro-glow{
+      position:absolute;width:220px;height:220px;border-radius:50%;
+      background:radial-gradient(circle,rgba(6,193,103,.18) 0%,transparent 70%);
+      animation:glowPulse 1.6s ease-in-out infinite alternate;
+      pointer-events:none;
+    }
+    @keyframes glowPulse{0%{transform:scale(.9);opacity:.6}100%{transform:scale(1.2);opacity:1}}
+
+    /* ========== MAIN PAGE ========== */
+    #main{
+      position:fixed;inset:0;display:flex;flex-direction:column;align-items:center;
+      justify-content:center;padding:28px 20px;gap:0;
+      opacity:0;transition:opacity .5s .7s ease;overflow-y:auto;
+    }
+    #main.show{opacity:1}
+
+    .brand{font-size:2.6rem;font-weight:900;letter-spacing:-1px;margin-bottom:2px}
+    .brand span{color:var(--green)}
+
+    .tagline{
+      font-size:.85rem;color:var(--muted);font-weight:500;letter-spacing:.03em;
+      text-align:center;max-width:280px;line-height:1.5;margin-bottom:32px;
+    }
+    .tagline em{font-style:normal;color:var(--green);font-weight:700}
+
+    /* ========== CARDS ========== */
+    .cards{display:flex;flex-direction:column;gap:14px;width:100%;max-width:380px}
+
+    .card-link{
+      display:flex;align-items:center;gap:16px;
+      background:var(--surface);border:1px solid var(--border);
+      border-radius:16px;padding:18px 20px;
+      text-decoration:none;color:var(--text);
+      transition:transform .2s,border-color .25s,box-shadow .25s;
+      cursor:pointer;
+    }
+    .card-link:hover,.card-link:focus-visible{
+      border-color:var(--green);transform:translateY(-2px);
+      box-shadow:0 0 20px rgba(6,193,103,.1);
+    }
+    .card-link:active{transform:scale(.98)}
+
+    .card-icon{
+      flex-shrink:0;width:46px;height:46px;border-radius:12px;
+      display:flex;align-items:center;justify-content:center;
+      background:var(--green-dim);
+    }
+    .card-icon svg{width:22px;height:22px;stroke:var(--green);fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+
+    .card-body{flex:1;min-width:0}
+    .card-title{font-weight:700;font-size:.95rem;margin-bottom:2px}
+    .card-sub{font-size:.78rem;color:var(--muted);line-height:1.4}
+
+    .card-arrow{color:var(--muted);transition:color .2s}
+    .card-link:hover .card-arrow{color:var(--green)}
+
+    /* ========== INSTALL BUTTON ========== */
+    .install-wrap{width:100%;max-width:380px;margin-top:28px}
+
+    .install-btn{
+      width:100%;display:flex;align-items:center;justify-content:center;gap:10px;
+      background:var(--green);color:#000;font-weight:700;font-size:.9rem;
+      border:none;border-radius:14px;padding:16px 20px;cursor:pointer;
+      transition:transform .15s,box-shadow .2s;
+      letter-spacing:.01em;
+    }
+    .install-btn:hover{transform:translateY(-1px);box-shadow:0 4px 24px rgba(6,193,103,.3)}
+    .install-btn:active{transform:scale(.97)}
+    .install-btn svg{flex-shrink:0}
+
+    .install-btn.installed{
+      background:var(--surface);color:var(--green);border:1px solid var(--green);
+      pointer-events:none;
+    }
+
+    .install-sub{
+      text-align:center;font-size:.7rem;color:var(--muted);margin-top:8px;
+      letter-spacing:.02em;
+    }
+
+    /* ========== QUOTE ========== */
+    .quote{
+      margin-top:36px;text-align:center;font-size:.8rem;
+      color:var(--muted);line-height:1.6;max-width:300px;
+      font-weight:500;letter-spacing:.02em;
+    }
+    .quote strong{color:var(--text);font-weight:700}
+    .quote-author{display:block;margin-top:8px;font-size:.75rem;color:var(--green);font-weight:600;letter-spacing:.03em}
+
+    /* ========== ANIMATIONS (stagger) ========== */
+    .cards .card-link{opacity:0;transform:translateY(18px);animation:cardIn .5s ease forwards}
+    .cards .card-link:nth-child(1){animation-delay:.8s}
+    .cards .card-link:nth-child(2){animation-delay:.95s}
+    .cards .card-link:nth-child(3){animation-delay:1.1s}
+    @keyframes cardIn{to{opacity:1;transform:none}}
+
+    .install-wrap{opacity:0;animation:cardIn .5s 1.25s ease forwards}
+    .quote{opacity:0;animation:cardIn .5s 1.4s ease forwards}
+
+    /* ========== RESPONSIVE ========== */
+    @media(min-width:600px){
+      .brand{font-size:3.2rem}
+      .cards{max-width:440px}
+      .install-wrap{max-width:440px}
+    }
+  </style>
+</head>
+<body>
+
+  <!-- ===== INTRO SPLASH ===== -->
+  <div id="intro" aria-hidden="true">
+    <div class="intro-glow"></div>
+    <img src="REQUEST/icon.png" alt="Mzala" class="intro-icon"/>
+  </div>
+
+  <!-- ===== MAIN CONTENT ===== -->
+  <div id="main">
+    <h1 class="brand">Mzala<span>.</span></h1>
+
+    <div class="cards">
+      <!-- CLIENT -->
+      <a class="card-link" href="REQUEST/index.html" data-fullscreen>
+        <div class="card-icon">
+          <svg viewBox="0 0 24 24"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0118 0z"/><circle cx="12" cy="10" r="3"/></svg>
+        </div>
+        <div class="card-body">
+          <div class="card-title">What your clients see</div>
+          <div class="card-sub">The passenger booking experience</div>
+        </div>
+        <svg class="card-arrow" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+      </a>
+
+      <!-- DRIVER -->
+      <a class="card-link" href="DRIVER/index.html" data-fullscreen>
+        <div class="card-icon">
+          <svg viewBox="0 0 24 24"><rect x="1" y="3" width="15" height="13" rx="2"/><polyline points="16 8 20 8 23 11 23 16 1 16 1 11"/><circle cx="5.5" cy="18.5" r="2.5"/><circle cx="18.5" cy="18.5" r="2.5"/></svg>
+        </div>
+        <div class="card-body">
+          <div class="card-title">What your drivers see</div>
+          <div class="card-sub">The driver dashboard &amp; ride queue</div>
+        </div>
+        <svg class="card-arrow" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+      </a>
+
+      <!-- ADMIN -->
+      <a class="card-link" href="ADMIN/index.html" data-fullscreen>
+        <div class="card-icon">
+          <svg viewBox="0 0 24 24"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+        </div>
+        <div class="card-body">
+          <div class="card-title">What you the owner sees</div>
+          <div class="card-sub">Admin panel — drivers, zones &amp; pricing</div>
+        </div>
+        <svg class="card-arrow" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+      </a>
+    </div>
+
+    <!-- Install PWA -->
+    <div class="install-wrap">
+      <button id="installBtn" class="install-btn" style="display:none">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+        Who needs Playstore
+      </button>
+      <p class="install-sub" id="installSub" style="display:none">Install Mzala directly — no app store needed</p>
+    </div>
+
+    <p class="quote">
+      <strong>"We don't build the future,<br/>we engineer it."</strong>
+      <span class="quote-author">— networKING</span>
+    </p>
+  </div>
+
+  <script>
+    /* ── Intro timing ── */
+    const intro = document.getElementById('intro');
+    const main  = document.getElementById('main');
+    setTimeout(() => { intro.classList.add('done'); main.classList.add('show'); }, 1600);
+    setTimeout(() => { intro.style.display = 'none'; }, 2400);
+
+    /* ── Fullscreen on navigation ── */
+    document.querySelectorAll('[data-fullscreen]').forEach(link => {
+      link.addEventListener('click', e => {
+        // Request fullscreen then navigate
+        const el = document.documentElement;
+        const goFS = el.requestFullscreen || el.webkitRequestFullscreen || el.msRequestFullscreen;
+        if (goFS) {
+          try { goFS.call(el); } catch(_){}
+        }
+        // Navigation happens naturally via href
+      });
+    });
+
+    /* ── PWA install ── */
+    let deferredPrompt = null;
+    const installBtn = document.getElementById('installBtn');
+    const installSub = document.getElementById('installSub');
+
+    window.addEventListener('beforeinstallprompt', e => {
+      e.preventDefault();
+      deferredPrompt = e;
+      installBtn.style.display = '';
+      installSub.style.display = '';
+    });
+
+    installBtn.addEventListener('click', async () => {
+      if (!deferredPrompt) return;
+      deferredPrompt.prompt();
+      const result = await deferredPrompt.userChoice;
+      if (result.outcome === 'accepted') {
+        installBtn.innerHTML = '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg> Installed';
+        installBtn.classList.add('installed');
+        installSub.textContent = 'You\'re all set — find Mzala on your home screen';
+      }
+      deferredPrompt = null;
+    });
+
+    window.addEventListener('appinstalled', () => {
+      installBtn.innerHTML = '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg> Installed';
+      installBtn.classList.add('installed');
+      installSub.textContent = 'You\'re all set — find Mzala on your home screen';
+      deferredPrompt = null;
+    });
+
+    // If already installed as PWA, show a different state
+    if (window.matchMedia('(display-mode: standalone)').matches) {
+      installBtn.style.display = '';
+      installBtn.innerHTML = '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg> Installed';
+      installBtn.classList.add('installed');
+      installSub.style.display = '';
+      installSub.textContent = 'Running as an app';
+    }
+
+    /* ── Register service worker ── */
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.register('sw.js').catch(() => {});
+    }
+  </script>
+</body>
+</html>
