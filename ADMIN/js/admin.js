@@ -345,8 +345,7 @@ document.addEventListener('DOMContentLoaded', ()=>{
   const priceHikeDayEl = document.getElementById('priceHikeDay');
   const priceHikeNightEl = document.getElementById('priceHikeNight');
   const priceNightHourEl = document.getElementById('priceNightHour');
-  const priceBaseFareEl = document.getElementById('priceBaseFare');
-  const pricePricePerStopEl = document.getElementById('pricePricePerStop');
+  const priceNightEndHourEl = document.getElementById('priceNightEndHour');
   const priceSaveBtn = document.getElementById('priceSaveBtn');
   const priceResetBtn = document.getElementById('priceResetBtn');
   const priceMsg = document.getElementById('priceMsg');
@@ -366,8 +365,7 @@ document.addEventListener('DOMContentLoaded', ()=>{
     if (typeof data.hikeDay === 'number') priceHikeDayEl.value = data.hikeDay;
     if (typeof data.hikeNight === 'number') priceHikeNightEl.value = data.hikeNight;
     if (typeof data.nightStartHour === 'number') priceNightHourEl.value = data.nightStartHour;
-    if (typeof data.baseFare === 'number') priceBaseFareEl.value = data.baseFare;
-    if (typeof data.pricePerStop === 'number') pricePricePerStopEl.value = data.pricePerStop;
+    if (typeof data.nightEndHour === 'number') priceNightEndHourEl.value = data.nightEndHour;
   }
 
   // Live listener — syncs across admins
@@ -382,12 +380,11 @@ document.addEventListener('DOMContentLoaded', ()=>{
     const hikeDay = Math.max(1, Math.min(999, parseInt(priceHikeDayEl.value,10)||35));
     const hikeNight = Math.max(1, Math.min(999, parseInt(priceHikeNightEl.value,10)||50));
     const nightStartHour = Math.max(0, Math.min(23, parseInt(priceNightHourEl.value,10)||22));
-    const baseFare = Math.max(0, Math.min(999, parseInt(priceBaseFareEl.value,10)||0));
-    const pricePerStop = Math.max(0, Math.min(999, parseInt(pricePricePerStopEl.value,10)||5));
+    const nightEndHour = Math.max(0, Math.min(23, parseInt(priceNightEndHourEl.value,10)||8));
     priceSaveBtn.disabled = true;
     priceSaveBtn.textContent = 'Saving…';
     try {
-      await db.ref('settings/pricing').set({ normalDay, normalNight, hikeDay, hikeNight, nightStartHour, baseFare, pricePerStop, updatedAt: Date.now() });
+      await db.ref('settings/pricing').set({ normalDay, normalNight, hikeDay, hikeNight, nightStartHour, nightEndHour, updatedAt: Date.now() });
       showPriceMsg('Pricing saved', 'success');
     } catch(e){
       console.error(e);

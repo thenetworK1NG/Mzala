@@ -26,7 +26,7 @@ let riderAccount = null;
 let geofence = null;
 
 // Pricing (loaded from Firebase settings/pricing)
-let pricing = null; // { normalDay, normalNight, hikeDay, hikeNight, nightStartHour }
+let pricing = null; // { normalDay, normalNight, hikeDay, hikeNight, nightStartHour, nightEndHour }
 
 // Hike zones (loaded from Firebase settings/hikeZones)
 let hikeZones = null; // { key: { lat, lng, radiusKm }, ... }
@@ -96,16 +96,17 @@ function isInHikeZone(latLng){
   return false;
 }
 
-// Determine if it's nighttime
+// Determine if it's nighttime (default 22:00–08:00)
 function isNightTime(){
   const hour = new Date().getHours();
   const nightStart = (pricing && typeof pricing.nightStartHour === 'number') ? pricing.nightStartHour : 22;
-  return hour >= nightStart || hour < 6;
+  const nightEnd = (pricing && typeof pricing.nightEndHour === 'number') ? pricing.nightEndHour : 8;
+  return hour >= nightStart || hour < nightEnd;
 }
 
-// Calculate price per person and total (with baseFare + pricePerStop)
+// Calculate price: rate × passengers × points booked
 function calculatePrice(passengers){
-  const defaults = { normalDay: 20, normalNight: 30, hikeDay: 35, hikeNight: 50, baseFare: 0, pricePerStop: 5 };
+  const defaults = { normalDay: 20, normalNight: 30, hikeDay: 35, hikeNight: 50 };
   const p = pricing || defaults;
   // Hike zone applies if pickup OR any stop/destination is inside a hike zone
   let inHike = lastKnownLatLng ? isInHikeZone(lastKnownLatLng) : false;
@@ -121,11 +122,9 @@ function calculatePrice(passengers){
   } else {
     pp = night ? (p.normalNight || defaults.normalNight) : (p.normalDay || defaults.normalDay);
   }
-  const baseFare = typeof p.baseFare === 'number' ? p.baseFare : defaults.baseFare;
-  const pricePerStop = typeof p.pricePerStop === 'number' ? p.pricePerStop : defaults.pricePerStop;
   const stopCount = stops.length;
-  const total = baseFare + (pricePerStop * stopCount) + (pp * passengers);
-  return { pricePerPerson: pp, total, isHikeZone: inHike, isNight: night, baseFare, pricePerStop, stopCount };
+  const total = pp * passengers * stopCount;
+  return { pricePerPerson: pp, total, isHikeZone: inHike, isNight: night, stopCount };
 }
 
 // ===== Account management =====
@@ -275,12 +274,14 @@ function updatePriceDisplay(){
   const paxLabel = document.getElementById('pricePaxLabel');
   const zoneBadge = document.getElementById('priceZoneBadge');
   const totalDisplay = document.getElementById('priceTotalDisplay');
-  // Build breakdown label: "Base: R{x} + {n} stops × R{y} + {p} × R{z}"
-  let parts = [];
-  if (priceInfo.baseFare > 0) parts.push(`Base R${priceInfo.baseFare}`);
-  if (priceInfo.stopCount > 0 && priceInfo.pricePerStop > 0) parts.push(`${priceInfo.stopCount} stop${priceInfo.stopCount !== 1 ? 's' : ''} × R${priceInfo.pricePerStop}`);
-  parts.push(`${selectedPassengers} × R${priceInfo.pricePerPerson}`);
-  if (paxLabel) paxLabel.textContent = parts.join(' + ');
+  // Breakdown: "{stops} points × {pax} pax × R{rate}"
+  let label = '';
+  if (priceInfo.stopCount > 0) {
+    label = `${priceInfo.stopCount} point${priceInfo.stopCount !== 1 ? 's' : ''} × ${selectedPassengers} pax × R${priceInfo.pricePerPerson}`;
+  } else {
+    label = `${selectedPassengers} pax × R${priceInfo.pricePerPerson}`;
+  }
+  if (paxLabel) paxLabel.textContent = label;
   if (zoneBadge) zoneBadge.style.display = priceInfo.isHikeZone ? '' : 'none';
   if (totalDisplay) totalDisplay.textContent = `R${priceInfo.total}`;
 }
