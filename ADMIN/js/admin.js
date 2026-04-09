@@ -29,19 +29,17 @@ document.addEventListener('DOMContentLoaded', ()=>{
       const d = val[k];
       const el = document.createElement('div');
       el.className = 'driver-card';
-      const online = d.online ? '<strong style="color:#06c167">Online</strong>' : '<span style="color:#636366">Offline</span>';
-      // Active = browser tab visible (GPS trackable). Only meaningful when online.
-      let statusHtml;
+      let online;
       if (d.online && d.active) {
-        statusHtml = '<span class="driver-status-online">Online</span> · <span class="driver-status-active">Active</span>';
-      } else if (d.online) {
-        statusHtml = '<span class="driver-status-online">Online</span> · <span style="color:#f5a623">Inactive</span>';
+        online = '<strong style="color:#06c167">Online · Active</strong>';
+      } else if (d.online && !d.active) {
+        online = '<strong style="color:#f5a623">Online · Inactive</strong>';
       } else {
-        statusHtml = '<span class="driver-status-offline">Offline</span>';
+        online = '<span style="color:#636366">Offline</span>';
       }
       const loc = (d.lat && d.lng) ? `${d.lat.toFixed(5)}, ${d.lng.toFixed(5)}` : 'no location';
       const hasLoc = typeof d.lat === 'number' && typeof d.lng === 'number';
-      el.innerHTML = `<div class="driver-info"><strong>${escapeHtml(d.name||'Unnamed')}</strong><div class="driver-meta">${statusHtml} · ${loc}</div></div>
+      el.innerHTML = `<div class="driver-info"><strong>${escapeHtml(d.name||'Unnamed')}</strong><div class="driver-meta">${online} · ${loc}</div></div>
         <div class="driver-actions">
           ${hasLoc ? `<button data-id="${escapeHtml(k)}" data-name="${escapeHtml(d.name||'Unnamed')}" data-lat="${d.lat}" data-lng="${d.lng}" class="locate">Locate</button>` : ''}
           <button data-id="${escapeHtml(k)}" class="remove">Remove</button>

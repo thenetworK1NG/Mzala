@@ -40,24 +40,6 @@ let shiftActive = false;
 let watchId = null;
 let onDisconnectHandler = null;
 
-// Map matching + real-time tracking toggle
-let mapMatchingEnabled = sessionStorage.getItem('mapMatchingEnabled') !== 'false'; // default true
-const mapMatchToggle = document.getElementById('mapMatchToggle');
-if (mapMatchToggle) {
-  mapMatchToggle.checked = mapMatchingEnabled;
-  mapMatchToggle.addEventListener('change', () => {
-    mapMatchingEnabled = mapMatchToggle.checked;
-    sessionStorage.setItem('mapMatchingEnabled', mapMatchingEnabled);
-  });
-}
-
-// Proximity threshold for auto-progress/complete (meters)
-const PROXIMITY_THRESHOLD_M = 30;
-
-// Currently accepted ride reference (for proximity checks)
-let acceptedRequestKey = null;
-let acceptedRequestData = null;
-
 let map = null;
 let driverLatLng = null;
 let driverMarker = null;
@@ -73,35 +55,48 @@ let showDriverRoute = true;
 let showPassengerRoute = true;
 let popupStopMarkers = [];
 
-// --- OSRM snap-to-road: snaps GPS coords to nearest road ---
-async function snapToRoad(lat, lng) {
+// ===== Active ride state =====
+let activeRideKey = null;       // Firebase key of the accepted ride
+let activeRideData = null;      // Full ride request data
+let currentStopIndex = 0;       // Which stop we're navigating to (0-based)
+let navRouteLayer = null;       // Current navigation route polyline
+let navTargetMarker = null;     // Current nav destination marker
+let lastNavFetchTime = 0;       // Throttle nav re-routes to avoid OSRM hammering
+let lastNavLatLng = null;       // Last position used for nav route fetch
+const NAV_REROUTE_INTERVAL = 10000; // Min ms between OSRM re-routes
+const NAV_REROUTE_DISTANCE = 50;    // Min meters moved before re-route
+
+// ===== Map matching (road snap) =====
+let mapMatchingEnabled = false;
+try { mapMatchingEnabled = sessionStorage.getItem('roadSnap') === '1'; } catch(e){}
+
+// Snap GPS coords to nearest road via OSRM
+async function snapToRoad(lat, lng){
   try {
     const resp = await fetch(`https://router.project-osrm.org/nearest/v1/driving/${lng},${lat}?number=1`);
     if (!resp.ok) return { lat, lng };
     const data = await resp.json();
-    if (data && data.waypoints && data.waypoints.length) {
-      const wp = data.waypoints[0].location; // [lon, lat]
+    if (data && data.code === 'Ok' && data.waypoints && data.waypoints.length) {
+      const wp = data.waypoints[0].location; // [lng, lat]
       return { lat: wp[1], lng: wp[0] };
     }
-  } catch (e) {
-    console.error('snapToRoad failed, using raw GPS', e);
-  }
-  return { lat, lng };
+  } catch(e) { console.error('Snap to road failed', e); }
+  return { lat, lng }; // fallback to raw GPS
 }
 
-// --- Smooth marker animation (interpolate over ~500ms) ---
-function animateMarker(marker, fromLatLng, toLatLng, duration) {
-  if (!marker || !fromLatLng || !toLatLng) { if (marker) marker.setLatLng(toLatLng); return; }
-  const startTime = performance.now();
-  const from = { lat: fromLatLng.lat, lng: fromLatLng.lng };
-  const to = { lat: toLatLng.lat, lng: toLatLng.lng };
-  function step(now) {
-    const elapsed = now - startTime;
+// Smooth marker animation using requestAnimationFrame
+function animateMarker(marker, fromLatLng, toLatLng, duration){
+  if (!marker || !fromLatLng || !toLatLng) return;
+  const start = performance.now();
+  const fLat = fromLatLng.lat || fromLatLng[0];
+  const fLng = fromLatLng.lng || fromLatLng[1];
+  const tLat = toLatLng.lat || toLatLng[0];
+  const tLng = toLatLng.lng || toLatLng[1];
+  function step(now){
+    const elapsed = now - start;
     const t = Math.min(elapsed / duration, 1);
-    // ease-out quad
-    const ease = t * (2 - t);
-    const lat = from.lat + (to.lat - from.lat) * ease;
-    const lng = from.lng + (to.lng - from.lng) * ease;
+    const lat = fLat + (tLat - fLat) * t;
+    const lng = fLng + (tLng - fLng) * t;
     marker.setLatLng([lat, lng]);
     if (t < 1) requestAnimationFrame(step);
   }
@@ -204,6 +199,7 @@ function renderItem(key, data, distanceMeters){
 async function acceptRequest(key){
   if (!selectedDriverId) return alert('Sign in as a driver first');
   if (!shiftActive) return alert('Start your shift before accepting rides');
+  if (activeRideKey) return alert('You already have an active ride. Complete it first.');
   const r = ref(db, 'ride_requests/' + key);
   try{
     const result = await runTransaction(r, (current) => {
@@ -218,11 +214,16 @@ async function acceptRequest(key){
       alert('Request already accepted by another driver');
       return;
     }
-    // Store accepted request reference for proximity checks
-    const snap = result.snapshot.val();
-    acceptedRequestKey = key;
-    acceptedRequestData = snap;
-    setStatus('Accepted request');
+    // Store active ride state
+    const snap = await get(r);
+    activeRideData = snap.val();
+    activeRideKey = key;
+    currentStopIndex = 0;
+    setStatus('Accepted request — opening map');
+    // Auto-open the map modal and lock it
+    await showRequestOnMap(activeRideData, key);
+    lockMapModal();
+    showRideActionButtons('accepted');
   }catch(e){ console.error('Accept failed', e); alert('Failed to accept request'); }
 }
 
@@ -230,17 +231,181 @@ async function completeRequest(key){
   if (!selectedDriverId) return alert('Sign in as a driver first');
   const r = ref(db, 'ride_requests/' + key);
   try{
-    // Set status to completed, then remove the request
+    // Set completed then remove
     await update(r, { status: 'completed' });
-    // Short delay so passenger sees 'completed' state before removal
+    // Small delay so passenger listener picks up the status before removal
     setTimeout(async () => {
-      try { await remove(r); } catch(e) { console.error('Failed to remove request after complete', e); }
-    }, 5500);
-    // Clear accepted ride reference
-    acceptedRequestKey = null;
-    acceptedRequestData = null;
+      try { await remove(r); } catch(e){}
+    }, 1500);
+    clearActiveRide();
     setStatus('Ride completed — request removed');
   }catch(e){ console.error('Complete failed', e); alert('Failed to complete request'); }
+}
+
+// ===== Map modal lock/unlock for active ride =====
+function lockMapModal(){
+  const closeBtn = document.getElementById('mapModalClose');
+  if (closeBtn) closeBtn.classList.add('disabled');
+  // Hide bottom bar buttons during active ride
+  if (refreshBtn) refreshBtn.style.display = 'none';
+  if (stopShiftBtn) stopShiftBtn.style.display = 'none';
+  const snapBtn = document.getElementById('roadSnapBtn');
+  if (snapBtn) snapBtn.style.display = 'none';
+  if (bottomBar) bottomBar.style.display = 'none';
+}
+
+function unlockMapModal(){
+  const closeBtn = document.getElementById('mapModalClose');
+  if (closeBtn) closeBtn.classList.remove('disabled');
+  // Restore bottom bar
+  if (refreshBtn) refreshBtn.style.display = '';
+  if (stopShiftBtn) stopShiftBtn.style.display = '';
+  const snapBtn = document.getElementById('roadSnapBtn');
+  if (snapBtn) snapBtn.style.display = '';
+  if (bottomBar) bottomBar.style.display = '';
+}
+
+function clearActiveRide(){
+  activeRideKey = null;
+  activeRideData = null;
+  currentStopIndex = 0;
+  lastNavFetchTime = 0;
+  lastNavLatLng = null;
+  // Clear nav route layer
+  if (navRouteLayer && popupMap) { try{ popupMap.removeLayer(navRouteLayer); }catch(e){} navRouteLayer = null; }
+  if (navTargetMarker && popupMap) { try{ popupMap.removeLayer(navTargetMarker); }catch(e){} navTargetMarker = null; }
+  // Hide nav banner and ride actions
+  const navBanner = document.getElementById('navBanner');
+  if (navBanner) navBanner.style.display = 'none';
+  const rideActions = document.getElementById('rideActions');
+  if (rideActions) rideActions.style.display = 'none';
+  unlockMapModal();
+  closeMapModal();
+}
+
+// ===== Ride action button visibility =====
+function showRideActionButtons(state){
+  const rideActions = document.getElementById('rideActions');
+  const pickedUpBtn = document.getElementById('pickedUpBtn');
+  const nextStopBtn = document.getElementById('nextStopBtn');
+  const tripDoneBtn = document.getElementById('tripDoneBtn');
+  if (!rideActions) return;
+  rideActions.style.display = 'flex';
+  // Hide all first
+  if (pickedUpBtn) pickedUpBtn.style.display = 'none';
+  if (nextStopBtn) nextStopBtn.style.display = 'none';
+  if (tripDoneBtn) tripDoneBtn.style.display = 'none';
+
+  if (state === 'accepted') {
+    // Driver has accepted but hasn't picked up yet — show "Picked Up"
+    if (pickedUpBtn) pickedUpBtn.style.display = '';
+  } else if (state === 'picked_up') {
+    // Ride in progress — show navigation controls
+    const stops = activeRideData && activeRideData.stops ? activeRideData.stops : [];
+    const hasMoreStops = stops.length > 1 && currentStopIndex < stops.length - 1;
+    if (hasMoreStops) {
+      if (nextStopBtn) nextStopBtn.style.display = '';
+    }
+    if (tripDoneBtn) tripDoneBtn.style.display = '';
+  }
+}
+
+// ===== Garmin-style navigation =====
+// Get turn arrow character from OSRM modifier
+function getTurnIcon(modifier, type){
+  if (type === 'arrive') return '🏁';
+  if (type === 'depart') return '🚗';
+  switch(modifier){
+    case 'left': case 'sharp left': return '⬅';
+    case 'slight left': return '↰';
+    case 'right': case 'sharp right': return '➡';
+    case 'slight right': return '↱';
+    case 'uturn': return '↩';
+    case 'straight': default: return '⬆';
+  }
+}
+
+function updateNavBanner(instruction, distance, modifier, type){
+  const banner = document.getElementById('navBanner');
+  const iconEl = document.getElementById('navBannerIcon');
+  const textEl = document.getElementById('navBannerText');
+  const distEl = document.getElementById('navBannerDist');
+  if (!banner) return;
+  banner.style.display = 'flex';
+  if (iconEl) iconEl.textContent = getTurnIcon(modifier, type);
+  if (textEl) textEl.textContent = instruction || 'Continue on route';
+  if (distEl) {
+    if (typeof distance === 'number') {
+      distEl.textContent = distance >= 1000 ? `${(distance/1000).toFixed(1)} km` : `${Math.round(distance)} m`;
+    } else {
+      distEl.textContent = '';
+    }
+  }
+}
+
+// Fetch OSRM route with turn-by-turn steps from driver position to target
+async function fetchNavRoute(fromLatLng, toLatLng){
+  try {
+    const fromLonLat = `${fromLatLng.lng},${fromLatLng.lat}`;
+    const toLonLat = `${toLatLng.lng},${toLatLng.lat}`;
+    const url = `https://router.project-osrm.org/route/v1/driving/${fromLonLat};${toLonLat}?overview=full&geometries=geojson&alternatives=false&steps=true`;
+    const resp = await fetch(url);
+    if (!resp.ok) return null;
+    const data = await resp.json();
+    if (!data || data.code !== 'Ok' || !data.routes || !data.routes.length) return null;
+    return data.routes[0];
+  } catch(e) { console.error('Nav route fetch error', e); return null; }
+}
+
+// Update the navigation display on the popup map
+async function updateNavigation(){
+  if (!activeRideKey || !activeRideData || !driverLatLng || !popupMap) return;
+  // Determine current navigation target
+  const target = getNavTarget();
+  if (!target) return;
+  // Throttle: only re-fetch route if enough time passed or driver moved significantly
+  const now = Date.now();
+  const moved = lastNavLatLng ? haversine(driverLatLng, lastNavLatLng) : Infinity;
+  if (now - lastNavFetchTime < NAV_REROUTE_INTERVAL && moved < NAV_REROUTE_DISTANCE) {
+    // Just update map center to follow driver
+    try { popupMap.setView([driverLatLng.lat, driverLatLng.lng], Math.max(popupMap.getZoom(), 16)); } catch(e){}
+    return;
+  }
+  lastNavFetchTime = now;
+  lastNavLatLng = { lat: driverLatLng.lat, lng: driverLatLng.lng };
+  const route = await fetchNavRoute(driverLatLng, target);
+  if (!route) return;
+  // Draw route on map
+  const coords = route.geometry.coordinates.map(c => [c[1], c[0]]);
+  if (navRouteLayer) { try{ popupMap.removeLayer(navRouteLayer); }catch(e){} }
+  navRouteLayer = L.polyline(coords, { color: '#06c167', weight: 6, opacity: 0.9 }).addTo(popupMap);
+  // Update turn instruction from first step of first leg
+  if (route.legs && route.legs.length && route.legs[0].steps && route.legs[0].steps.length > 1) {
+    const nextStep = route.legs[0].steps[1]; // step[0] is usually "depart", step[1] is first real turn
+    const maneuver = nextStep.maneuver || {};
+    const instruction = nextStep.name ? `${maneuver.type === 'turn' ? 'Turn' : maneuver.type || 'Continue'} onto ${nextStep.name}` : (maneuver.type || 'Continue');
+    updateNavBanner(instruction, nextStep.distance, maneuver.modifier, maneuver.type);
+  } else if (route.legs && route.legs[0] && route.legs[0].steps && route.legs[0].steps.length === 1) {
+    updateNavBanner('Arriving at destination', route.legs[0].distance, null, 'arrive');
+  }
+  // Center map on driver position at street level
+  try { popupMap.setView([driverLatLng.lat, driverLatLng.lng], Math.max(popupMap.getZoom(), 16)); } catch(e){}
+}
+
+// Get the current navigation target (next stop or final destination)
+function getNavTarget(){
+  if (!activeRideData) return null;
+  const stops = activeRideData.stops && Array.isArray(activeRideData.stops) ? activeRideData.stops : [];
+  // If we have stops and currentStopIndex is valid, navigate to that stop
+  if (stops.length > 0 && currentStopIndex < stops.length) {
+    const s = stops[currentStopIndex];
+    if (typeof s.lat === 'number') return { lat: s.lat, lng: s.lng };
+  }
+  // Fallback to final destination
+  if (activeRideData.destination && typeof activeRideData.destination.lat === 'number') {
+    return { lat: activeRideData.destination.lat, lng: activeRideData.destination.lng };
+  }
+  return null;
 }
 
 function timeAgo(ts){
@@ -322,9 +487,15 @@ if (profileBtn) profileBtn.addEventListener('click', ()=>{
 window.addEventListener('beforeunload', ()=>{
   if (selectedDriverId && shiftActive) {
     try{ update(ref(db, 'drivers/'+selectedDriverId), { online: false, active: false, lastSeen: Date.now() }); }catch(e){}
-    // onDisconnect will also handle abrupt disconnects; ensure onDisconnect is cancelled when closing gracefully
     try{ if (onDisconnectHandler) onDisconnectHandler.cancel(); }catch(e){}
   }
+});
+
+// ===== Active status broadcasting via Visibility API =====
+document.addEventListener('visibilitychange', ()=>{
+  if (!selectedDriverId || !shiftActive) return;
+  const isActive = document.visibilityState === 'visible';
+  try{ update(ref(db, 'drivers/'+selectedDriverId), { active: isActive, lastSeen: Date.now() }); }catch(e){}
 });
 
 async function ensureMap(){
@@ -481,9 +652,12 @@ async function ensurePopupMap(){
   setTimeout(()=>{ try{ popupMap.invalidateSize(); }catch(e){} }, 200);
 }
 
-// wire close button
+// wire close button (respects ride lock)
 const modalCloseBtn = document.getElementById('mapModalClose');
-if (modalCloseBtn) modalCloseBtn.addEventListener('click', () => { closeMapModal(); });
+if (modalCloseBtn) modalCloseBtn.addEventListener('click', () => {
+  if (activeRideKey) return; // locked during active ride
+  closeMapModal();
+});
 
 // Toggle controls in modal (buttons exist in DOM)
 const toggleDriverPathBtn = document.getElementById('toggleDriverPathBtn');
@@ -600,24 +774,25 @@ setStatus('Ready');
 async function updateDriverLocation(pos){
   let lat = pos.coords.latitude;
   let lng = pos.coords.longitude;
-
-  // Snap to nearest road if map matching is enabled
+  // Apply road snap if enabled
   if (mapMatchingEnabled) {
     const snapped = await snapToRoad(lat, lng);
     lat = snapped.lat;
     lng = snapped.lng;
   }
-
-  const prevLatLng = driverLatLng ? { lat: driverLatLng.lat, lng: driverLatLng.lng } : null;
+  const oldLatLng = driverLatLng ? { lat: driverLatLng.lat, lng: driverLatLng.lng } : null;
   driverLatLng = { lat, lng };
-
-  // Smooth marker animation on main map
+  // Smooth marker animation on popup map (during navigation)
+  if (popupMap && popupDriverMarker && oldLatLng) {
+    animateMarker(popupDriverMarker, oldLatLng, driverLatLng, 500);
+  } else if (popupMap && popupDriverMarker) {
+    popupDriverMarker.setLatLng([lat, lng]);
+  }
+  // Do not create or show the main map automatically; only update marker if main map exists
   if (map) {
-    if (!driverMarker) {
-      driverMarker = L.marker([lat, lng]).addTo(map).bindPopup('You');
-    } else {
-      animateMarker(driverMarker, prevLatLng, driverLatLng, 500);
-    }
+    if (!driverMarker) driverMarker = L.marker([lat, lng]).addTo(map).bindPopup('You');
+    else if (oldLatLng) animateMarker(driverMarker, oldLatLng, driverLatLng, 500);
+    else driverMarker.setLatLng([lat, lng]);
     try{ map.setView([lat, lng], 13); }catch(e){}
   }
   // trigger a reload of list ordering
@@ -629,10 +804,9 @@ async function updateDriverLocation(pos){
       await update(ref(db, 'drivers/'+selectedDriverId), { lat, lng, lastSeen: Date.now(), online: true });
     }catch(e){ console.error('Failed to update driver location', e); }
   }
-
-  // --- Proximity check for accepted ride (auto in_progress / auto complete) ---
-  if (acceptedRequestKey && acceptedRequestData) {
-    checkProximity(lat, lng);
+  // Update Garmin-style navigation if we have an active picked-up ride
+  if (activeRideKey && activeRideData && (activeRideData.status === 'picked_up' || activeRideData.status === 'in_progress')) {
+    updateNavigation();
   }
 }
 
@@ -658,10 +832,10 @@ async function startShift(){
       navigator.geolocation.getCurrentPosition(resolve, reject, {enableHighAccuracy:true, timeout:10000});
     });
     await updateDriverLocation(pos);
-    // mark driver online and active
+    // mark driver online + active
     try{ await update(ref(db, 'drivers/'+selectedDriverId), { online: true, active: true, lastSeen: Date.now() }); }catch(e){ console.error('Failed to set online', e); }
     // register onDisconnect fallback so if the driver loses connection or closes the browser
-    // the DB will mark them offline and inactive automatically
+    // the DB will mark them offline + inactive automatically
     try{
       onDisconnectHandler = onDisconnect(ref(db, 'drivers/'+selectedDriverId));
       await onDisconnectHandler.update({ online: false, active: false, lastSeen: Date.now() });
@@ -686,14 +860,12 @@ if (startShiftBtn) startShiftBtn.addEventListener('click', startShift);
 // Stop shift (clean shutdown)
 async function stopShift(){
   if (!shiftActive) return;
+  if (activeRideKey) return alert('You have an active ride. Complete it before going offline.');
   // stop geo watch
   try{ if (watchId && navigator.geolocation) navigator.geolocation.clearWatch(watchId); }catch(e){}
   watchId = null;
   shiftActive = false;
-  // Clear accepted ride
-  acceptedRequestKey = null;
-  acceptedRequestData = null;
-  // cancel onDisconnect and mark offline
+  // cancel onDisconnect and mark offline + inactive
   if (onDisconnectHandler) {
     try{ await onDisconnectHandler.cancel(); }catch(e){}
     onDisconnectHandler = null;
@@ -730,68 +902,66 @@ listEl.addEventListener('reorderRequests', async () => {
   }catch(e){ console.error('Failed to refresh requests', e); }
 });
 
-// --- Proximity check: auto-progress ride states ---
-async function checkProximity(lat, lng) {
-  if (!acceptedRequestKey || !acceptedRequestData) return;
-  const reqData = acceptedRequestData;
-
-  // Determine pickup origin
-  const origin = reqData.origin ? { lat: reqData.origin.lat, lng: reqData.origin.lng } : null;
-
-  // Determine final destination (last stop, or destination field)
-  let finalDest = null;
-  if (reqData.stops && Array.isArray(reqData.stops) && reqData.stops.length) {
-    const last = reqData.stops[reqData.stops.length - 1];
-    if (typeof last.lat === 'number') finalDest = { lat: last.lat, lng: last.lng };
-  }
-  if (!finalDest && reqData.destination && typeof reqData.destination.lat === 'number') {
-    finalDest = { lat: reqData.destination.lat, lng: reqData.destination.lng };
-  }
-
-  const currentStatus = reqData.status || 'accepted';
-  const driverPos = { lat, lng };
-
-  // Auto in_progress: driver near pickup
-  if (currentStatus === 'accepted' && origin) {
-    const distToPickup = haversine(driverPos, origin);
-    if (distToPickup <= PROXIMITY_THRESHOLD_M) {
-      try {
-        await update(ref(db, 'ride_requests/' + acceptedRequestKey), { status: 'in_progress' });
-        acceptedRequestData.status = 'in_progress';
-        setStatus('Ride in progress — heading to destination');
-      } catch (e) { console.error('Failed to set in_progress', e); }
-    }
-  }
-
-  // Auto complete: driver near final destination
-  if (currentStatus === 'in_progress' && finalDest) {
-    const distToDest = haversine(driverPos, finalDest);
-    if (distToDest <= PROXIMITY_THRESHOLD_M) {
-      try {
-        await update(ref(db, 'ride_requests/' + acceptedRequestKey), { status: 'completed' });
-        setStatus('Ride auto-completed — arrived at destination');
-        // Short delay so passenger sees completed state, then remove
-        const key = acceptedRequestKey;
-        acceptedRequestKey = null;
-        acceptedRequestData = null;
-        setTimeout(async () => {
-          try { await remove(ref(db, 'ride_requests/' + key)); } catch(e) {}
-        }, 5500);
-      } catch (e) { console.error('Failed to auto-complete', e); }
-    }
-  }
+// ===== Road Snap toggle =====
+const roadSnapBtn = document.getElementById('roadSnapBtn');
+if (roadSnapBtn) {
+  // Restore saved state
+  roadSnapBtn.classList.toggle('active', mapMatchingEnabled);
+  roadSnapBtn.addEventListener('click', () => {
+    mapMatchingEnabled = !mapMatchingEnabled;
+    roadSnapBtn.classList.toggle('active', mapMatchingEnabled);
+    try { sessionStorage.setItem('roadSnap', mapMatchingEnabled ? '1' : '0'); } catch(e){}
+    setStatus(mapMatchingEnabled ? 'Road snap ON' : 'Road snap OFF');
+  });
 }
 
-// --- Active status broadcasting (tab visibility) ---
-// ACTIVE = browser tab is visible and GPS is functional
-function updateActiveStatus(isActive) {
-  if (selectedDriverId && shiftActive) {
-    try {
-      update(ref(db, 'drivers/' + selectedDriverId), { active: isActive });
-    } catch (e) { console.error('Failed to update active status', e); }
-  }
-}
+// ===== Ride action button handlers =====
+const pickedUpBtn = document.getElementById('pickedUpBtn');
+const nextStopBtn = document.getElementById('nextStopBtn');
+const tripDoneBtn = document.getElementById('tripDoneBtn');
 
-document.addEventListener('visibilitychange', () => {
-  updateActiveStatus(document.visibilityState === 'visible');
+// "Picked Up" — driver confirms passenger is in the car
+if (pickedUpBtn) pickedUpBtn.addEventListener('click', async () => {
+  if (!activeRideKey) return;
+  try {
+    await update(ref(db, 'ride_requests/' + activeRideKey), { status: 'picked_up' });
+    if (activeRideData) activeRideData.status = 'picked_up';
+    showRideActionButtons('picked_up');
+    // Start navigation to first stop/destination
+    const navBanner = document.getElementById('navBanner');
+    if (navBanner) navBanner.style.display = 'flex';
+    // Force immediate nav update
+    lastNavFetchTime = 0;
+    lastNavLatLng = null;
+    updateNavigation();
+    setStatus('Ride started — navigating');
+  } catch(e) { console.error('Failed to update status', e); alert('Failed to mark as picked up'); }
+});
+
+// "Next Stop" — advance to next waypoint
+if (nextStopBtn) nextStopBtn.addEventListener('click', async () => {
+  if (!activeRideKey || !activeRideData) return;
+  const stops = activeRideData.stops && Array.isArray(activeRideData.stops) ? activeRideData.stops : [];
+  if (currentStopIndex < stops.length - 1) {
+    currentStopIndex++;
+    // Update Firebase so passenger can track progress
+    try { await update(ref(db, 'ride_requests/' + activeRideKey), { currentStop: currentStopIndex }); } catch(e){}
+    // Force re-route
+    lastNavFetchTime = 0;
+    lastNavLatLng = null;
+    await updateNavigation();
+    // Update button visibility
+    showRideActionButtons('picked_up');
+    setStatus(`Navigating to stop ${currentStopIndex + 1}`);
+  }
+});
+
+// "Trip Done" — with confirmation
+if (tripDoneBtn) tripDoneBtn.addEventListener('click', async () => {
+  if (!activeRideKey) return;
+  if (!confirm('Are you sure the trip is done?')) return;
+  try {
+    await completeRequest(activeRideKey);
+    setStatus('Trip completed');
+  } catch(e) { console.error('Failed to complete trip', e); alert('Failed to complete trip'); }
 });

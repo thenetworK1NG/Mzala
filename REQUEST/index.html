@@ -159,12 +159,11 @@
     <span id="badgeName"></span>
   </div>
 
-  <!-- ===== RIDE STATE OVERLAY (full-screen, blocks all interaction) ===== -->
-  <div id="rideOverlay" class="ride-overlay hidden">
+  <!-- ===== RIDE STATUS OVERLAY (blocks all interaction during ride lifecycle) ===== -->
+  <div id="rideOverlay" class="ride-overlay" style="display:none">
     <div class="ride-overlay-content">
-      <div class="ride-overlay-icon" id="rideOverlayIcon"></div>
-      <div class="ride-overlay-msg" id="rideOverlayMsg"></div>
-      <div class="ride-overlay-sub" id="rideOverlaySub"></div>
+      <div class="ride-overlay-icon">🚗</div>
+      <div class="ride-overlay-msg" id="rideOverlayMsg">WAITING FOR A DRIVER</div>
     </div>
   </div>
 

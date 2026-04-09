@@ -103,7 +103,7 @@ function isNightTime(){
   return hour >= nightStart || hour < 6;
 }
 
-// Calculate price per person and total (with multi-stop pricing)
+// Calculate price per person and total (with baseFare + pricePerStop)
 function calculatePrice(passengers){
   const defaults = { normalDay: 20, normalNight: 30, hikeDay: 35, hikeNight: 50, baseFare: 0, pricePerStop: 5 };
   const p = pricing || defaults;
@@ -124,7 +124,6 @@ function calculatePrice(passengers){
   const baseFare = typeof p.baseFare === 'number' ? p.baseFare : defaults.baseFare;
   const pricePerStop = typeof p.pricePerStop === 'number' ? p.pricePerStop : defaults.pricePerStop;
   const stopCount = stops.length;
-  // total = baseFare + (pricePerStop × stops) + (pricePerPerson × passengers)
   const total = baseFare + (pricePerStop * stopCount) + (pp * passengers);
   return { pricePerPerson: pp, total, isHikeZone: inHike, isNight: night, baseFare, pricePerStop, stopCount };
 }
@@ -276,16 +275,12 @@ function updatePriceDisplay(){
   const paxLabel = document.getElementById('pricePaxLabel');
   const zoneBadge = document.getElementById('priceZoneBadge');
   const totalDisplay = document.getElementById('priceTotalDisplay');
-  // Build breakdown: "Base: R{x} + {n} stops × R{y} + {p} pax × R{z}"
-  let breakdown = '';
-  if (priceInfo.baseFare > 0) breakdown += `Base R${priceInfo.baseFare}`;
-  if (priceInfo.stopCount > 0 && priceInfo.pricePerStop > 0) {
-    if (breakdown) breakdown += ' + ';
-    breakdown += `${priceInfo.stopCount} stop${priceInfo.stopCount > 1 ? 's' : ''} × R${priceInfo.pricePerStop}`;
-  }
-  if (breakdown) breakdown += ' + ';
-  breakdown += `${selectedPassengers} × R${priceInfo.pricePerPerson}`;
-  if (paxLabel) paxLabel.textContent = breakdown;
+  // Build breakdown label: "Base: R{x} + {n} stops × R{y} + {p} × R{z}"
+  let parts = [];
+  if (priceInfo.baseFare > 0) parts.push(`Base R${priceInfo.baseFare}`);
+  if (priceInfo.stopCount > 0 && priceInfo.pricePerStop > 0) parts.push(`${priceInfo.stopCount} stop${priceInfo.stopCount !== 1 ? 's' : ''} × R${priceInfo.pricePerStop}`);
+  parts.push(`${selectedPassengers} × R${priceInfo.pricePerPerson}`);
+  if (paxLabel) paxLabel.textContent = parts.join(' + ');
   if (zoneBadge) zoneBadge.style.display = priceInfo.isHikeZone ? '' : 'none';
   if (totalDisplay) totalDisplay.textContent = `R${priceInfo.total}`;
 }
@@ -526,7 +521,6 @@ function ensureMapClick() {
       const km = (result.distance / 1000).toFixed(2);
       const mins = Math.round(result.duration / 60);
       showRidePanel(km, mins);
-      updatePriceDisplay(); // Recalculate price dynamically when stops change
       setStatus(`Route: ${km} km · ~${mins} min`);
     } catch (err) {
       // Revert the stop we just added on failure
@@ -572,15 +566,17 @@ function estimateMinutesFromMeters(m){
   return Math.max(1, Math.round(m / metersPerMin));
 }
 
-function ensureRideStatusEl(){
-  let el = document.getElementById('rideStatus');
-  const panel = document.getElementById('ridePanel');
-  if (!panel) return null;
-  if (!el){
-    el = document.createElement('div'); el.id = 'rideStatus'; el.style.marginTop = '12px'; el.style.fontSize = '0.85rem'; el.style.fontWeight = '600'; el.style.color = '#06c167'; el.style.textAlign = 'center';
-    panel.appendChild(el);
-  }
-  return el;
+// ===== Ride overlay state machine =====
+function showRideOverlay(message){
+  const overlay = document.getElementById('rideOverlay');
+  const msgEl = document.getElementById('rideOverlayMsg');
+  if (overlay) overlay.style.display = 'flex';
+  if (msgEl) msgEl.textContent = message;
+}
+
+function hideRideOverlay(){
+  const overlay = document.getElementById('rideOverlay');
+  if (overlay) overlay.style.display = 'none';
 }
 
 function attachRequestListener(requestId){
@@ -588,106 +584,50 @@ function attachRequestListener(requestId){
   const rRef = ref(database, 'ride_requests/' + requestId);
   // detach previous
   try{ if (myRequestUnsub) myRequestUnsub(); }catch(e){}
-  myRequestUnsub = onValue(rRef, async (snap) => {
+  try{ if (myDriverUnsub) myDriverUnsub(); myDriverUnsub = null; }catch(e){}
+
+  // Show initial waiting overlay
+  showRideOverlay('WAITING FOR A DRIVER');
+
+  myRequestUnsub = onValue(rRef, (snap) => {
     const data = snap.val();
-    const overlay = document.getElementById('rideOverlay');
-    const overlayMsg = document.getElementById('rideOverlayMsg');
-    const overlaySub = document.getElementById('rideOverlaySub');
-    const overlayIcon = document.getElementById('rideOverlayIcon');
-
-    // --- Request deleted (driver completed + removed) ---
     if (!data) {
+      // Request removed (driver completed the ride)
       try{ localStorage.removeItem('myRequestId'); }catch(e){}
-      try{ if (myDriverUnsub) myDriverUnsub(); }catch(e){}
-      // Show "ride complete" overlay briefly then dismiss
-      showRideOverlay('🎉', 'RIDE COMPLETE', 'THANK YOU FOR USING US', 'complete');
-      setTimeout(() => { hideRideOverlay(); cleanupAfterRide(); }, 5000);
+      showRideOverlay('RIDE COMPLETE, THANK YOU FOR USING US');
+      hideRidePanel();
+      setTimeout(() => { hideRideOverlay(); }, 5000);
       return;
     }
-
-    const status = data.status || '';
-
-    // --- Completed status (before removal) ---
-    if (status === 'completed') {
+    if (data.status === 'completed'){
       try{ localStorage.removeItem('myRequestId'); }catch(e){}
-      try{ if (myDriverUnsub) myDriverUnsub(); }catch(e){}
-      showRideOverlay('🎉', 'RIDE COMPLETE', 'THANK YOU FOR USING US', 'complete');
-      setTimeout(() => { hideRideOverlay(); cleanupAfterRide(); }, 5000);
+      showRideOverlay('RIDE COMPLETE, THANK YOU FOR USING US');
+      hideRidePanel();
+      setTimeout(() => { hideRideOverlay(); }, 5000);
       return;
     }
-
-    // --- In progress ---
-    if (status === 'in_progress') {
-      try{ if (myDriverUnsub) myDriverUnsub(); }catch(e){}
-      showRideOverlay('🚗', 'YOUR RIDE IS IN PROGRESS', '', '');
+    if (data.status === 'picked_up'){
+      // Driver has picked up passenger — ride in progress
+      showRideOverlay('YOUR RIDE IS IN PROGRESS');
+      hideRidePanel();
       return;
     }
-
-    // --- Accepted: driver on the way ---
-    if (data.acceptedBy && status === 'accepted') {
-      showRideOverlay('🚗', 'DRIVER ON THE WAY TO YOU', 'Calculating ETA…', '');
-      // subscribe to driver location for ETA
-      const driverId = data.acceptedBy;
-      try{ if (myDriverUnsub) myDriverUnsub(); }catch(e){}
-      const dRef = ref(database, 'drivers/' + driverId);
-      myDriverUnsub = onValue(dRef, (dSnap) => {
-        const dv = dSnap.val() || {};
-        const driverPos = (typeof dv.lat === 'number' && typeof dv.lng === 'number') ? { lat: dv.lat, lng: dv.lng } : null;
-        const origin = data.origin ? { lat: data.origin.lat, lng: data.origin.lng } : null;
-        if (driverPos && origin) {
-          const meters = distanceMeters(driverPos, origin);
-          const mins = estimateMinutesFromMeters(meters);
-          const subEl = document.getElementById('rideOverlaySub');
-          if (subEl) subEl.textContent = `ETA ~${mins} min`;
-        }
-      });
+    if (data.acceptedBy) {
+      // Driver accepted — on the way (NO ETA shown, just message)
+      showRideOverlay('DRIVER ON THE WAY TO YOU');
+      hideRidePanel();
       return;
     }
-
-    // --- Waiting for driver (no acceptedBy) ---
-    showRideOverlay('⏳', 'WAITING FOR A DRIVER', '', 'waiting');
-    // NO ETA shown during waiting state
-    try{ if (myDriverUnsub) myDriverUnsub(); }catch(e){}
+    // No driver yet — waiting
+    showRideOverlay('WAITING FOR A DRIVER');
   });
 }
 
-// --- Overlay helpers ---
-function showRideOverlay(icon, msg, sub, iconClass) {
-  const overlay = document.getElementById('rideOverlay');
-  const overlayMsg = document.getElementById('rideOverlayMsg');
-  const overlaySub = document.getElementById('rideOverlaySub');
-  const overlayIcon = document.getElementById('rideOverlayIcon');
-  if (!overlay) return;
-  if (overlayIcon) {
-    overlayIcon.textContent = icon;
-    overlayIcon.className = 'ride-overlay-icon' + (iconClass ? ' ' + iconClass : '');
-  }
-  if (overlayMsg) overlayMsg.textContent = msg;
-  if (overlaySub) overlaySub.textContent = sub || '';
-  overlay.classList.remove('hidden');
-  // Block map interaction
-  const mapContainer = document.querySelector('.leaflet-container');
-  if (mapContainer) mapContainer.style.pointerEvents = 'none';
-}
-
-function hideRideOverlay() {
-  const overlay = document.getElementById('rideOverlay');
-  if (overlay) overlay.classList.add('hidden');
-  // Restore map interaction
-  const mapContainer = document.querySelector('.leaflet-container');
-  if (mapContainer) mapContainer.style.pointerEvents = '';
-}
-
-function cleanupAfterRide() {
-  hideRidePanel();
-  const rs = document.getElementById('rideStatus');
-  if (rs) rs.remove();
-  myRequestId = null;
-  showToast('Ride completed');
-}
-
 // attach listener on load if we have an outstanding request
-try{ const saved = localStorage.getItem('myRequestId'); if (saved) { myRequestId = saved; attachRequestListener(saved); } }catch(e){}
+try{
+  const saved = localStorage.getItem('myRequestId');
+  if (saved) { myRequestId = saved; attachRequestListener(saved); }
+}catch(e){}
 
 function hideRidePanel() {
   const panel = document.getElementById('ridePanel');
