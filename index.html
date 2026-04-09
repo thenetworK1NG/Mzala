@@ -222,13 +222,7 @@
     /* ── Fullscreen on navigation ── */
     document.querySelectorAll('[data-fullscreen]').forEach(link => {
       link.addEventListener('click', e => {
-        // Request fullscreen then navigate
-        const el = document.documentElement;
-        const goFS = el.requestFullscreen || el.webkitRequestFullscreen || el.msRequestFullscreen;
-        if (goFS) {
-          try { goFS.call(el); } catch(_){}
-        }
-        // Navigation happens naturally via href
+        try { sessionStorage.setItem('mzala_fs', '1'); } catch(_){}
       });
     });
 

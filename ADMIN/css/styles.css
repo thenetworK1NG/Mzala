@@ -425,6 +425,19 @@ header span { color: var(--green); }
 }
 .driver-actions button.locate:hover { background: var(--green-light); }
 
+/* ===== DRIVER STATUS: ACTIVE (amber) ===== */
+.driver-status-active {
+  color: #f5a623;
+  font-weight: 700;
+}
+.driver-status-online {
+  color: #06c167;
+  font-weight: 700;
+}
+.driver-status-offline {
+  color: #636366;
+}
+
 /* ===== MOBILE ===== */
 @media (max-width: 600px) {
   .container { padding: 0 10px 40px; }

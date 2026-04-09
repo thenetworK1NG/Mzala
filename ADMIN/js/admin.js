@@ -30,9 +30,18 @@ document.addEventListener('DOMContentLoaded', ()=>{
       const el = document.createElement('div');
       el.className = 'driver-card';
       const online = d.online ? '<strong style="color:#06c167">Online</strong>' : '<span style="color:#636366">Offline</span>';
+      // Active = browser tab visible (GPS trackable). Only meaningful when online.
+      let statusHtml;
+      if (d.online && d.active) {
+        statusHtml = '<span class="driver-status-online">Online</span> · <span class="driver-status-active">Active</span>';
+      } else if (d.online) {
+        statusHtml = '<span class="driver-status-online">Online</span> · <span style="color:#f5a623">Inactive</span>';
+      } else {
+        statusHtml = '<span class="driver-status-offline">Offline</span>';
+      }
       const loc = (d.lat && d.lng) ? `${d.lat.toFixed(5)}, ${d.lng.toFixed(5)}` : 'no location';
       const hasLoc = typeof d.lat === 'number' && typeof d.lng === 'number';
-      el.innerHTML = `<div class="driver-info"><strong>${escapeHtml(d.name||'Unnamed')}</strong><div class="driver-meta">${online} · ${loc}</div></div>
+      el.innerHTML = `<div class="driver-info"><strong>${escapeHtml(d.name||'Unnamed')}</strong><div class="driver-meta">${statusHtml} · ${loc}</div></div>
         <div class="driver-actions">
           ${hasLoc ? `<button data-id="${escapeHtml(k)}" data-name="${escapeHtml(d.name||'Unnamed')}" data-lat="${d.lat}" data-lng="${d.lng}" class="locate">Locate</button>` : ''}
           <button data-id="${escapeHtml(k)}" class="remove">Remove</button>
@@ -338,6 +347,8 @@ document.addEventListener('DOMContentLoaded', ()=>{
   const priceHikeDayEl = document.getElementById('priceHikeDay');
   const priceHikeNightEl = document.getElementById('priceHikeNight');
   const priceNightHourEl = document.getElementById('priceNightHour');
+  const priceBaseFareEl = document.getElementById('priceBaseFare');
+  const pricePricePerStopEl = document.getElementById('pricePricePerStop');
   const priceSaveBtn = document.getElementById('priceSaveBtn');
   const priceResetBtn = document.getElementById('priceResetBtn');
   const priceMsg = document.getElementById('priceMsg');
@@ -357,6 +368,8 @@ document.addEventListener('DOMContentLoaded', ()=>{
     if (typeof data.hikeDay === 'number') priceHikeDayEl.value = data.hikeDay;
     if (typeof data.hikeNight === 'number') priceHikeNightEl.value = data.hikeNight;
     if (typeof data.nightStartHour === 'number') priceNightHourEl.value = data.nightStartHour;
+    if (typeof data.baseFare === 'number') priceBaseFareEl.value = data.baseFare;
+    if (typeof data.pricePerStop === 'number') pricePricePerStopEl.value = data.pricePerStop;
   }
 
   // Live listener — syncs across admins
@@ -371,10 +384,12 @@ document.addEventListener('DOMContentLoaded', ()=>{
     const hikeDay = Math.max(1, Math.min(999, parseInt(priceHikeDayEl.value,10)||35));
     const hikeNight = Math.max(1, Math.min(999, parseInt(priceHikeNightEl.value,10)||50));
     const nightStartHour = Math.max(0, Math.min(23, parseInt(priceNightHourEl.value,10)||22));
+    const baseFare = Math.max(0, Math.min(999, parseInt(priceBaseFareEl.value,10)||0));
+    const pricePerStop = Math.max(0, Math.min(999, parseInt(pricePricePerStopEl.value,10)||5));
     priceSaveBtn.disabled = true;
     priceSaveBtn.textContent = 'Saving…';
     try {
-      await db.ref('settings/pricing').set({ normalDay, normalNight, hikeDay, hikeNight, nightStartHour, updatedAt: Date.now() });
+      await db.ref('settings/pricing').set({ normalDay, normalNight, hikeDay, hikeNight, nightStartHour, baseFare, pricePerStop, updatedAt: Date.now() });
       showPriceMsg('Pricing saved', 'success');
     } catch(e){
       console.error(e);

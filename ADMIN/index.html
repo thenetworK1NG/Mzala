@@ -131,6 +131,20 @@
             <input type="number" id="priceNightHour" class="radius-input" value="22" min="0" max="23" step="1" />
           </div>
         </div>
+        <div class="fence-row">
+          <span class="field-label">Base fare (per trip)</span>
+          <div class="radius-control">
+            <span class="currency-label">R</span>
+            <input type="number" id="priceBaseFare" class="radius-input" value="0" min="0" max="999" step="1" />
+          </div>
+        </div>
+        <div class="fence-row">
+          <span class="field-label">Price per stop</span>
+          <div class="radius-control">
+            <span class="currency-label">R</span>
+            <input type="number" id="pricePricePerStop" class="radius-input" value="5" min="0" max="999" step="1" />
+          </div>
+        </div>
 
         <div class="fence-row fence-actions">
           <button id="priceSaveBtn" class="btn-primary" style="flex:1">Save pricing</button>
@@ -189,5 +203,19 @@
   <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-database-compat.js"></script>
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <script src="js/admin.js"></script>
+  <script>
+  (function(){
+    try { if (sessionStorage.getItem('mzala_fs') !== '1') return; } catch(e){ return; }
+    function goFS(){
+      var el = document.documentElement;
+      var fn = el.requestFullscreen || el.webkitRequestFullscreen || el.msRequestFullscreen;
+      if (fn) try { fn.call(el); } catch(e){}
+      document.removeEventListener('click', goFS, true);
+      document.removeEventListener('touchstart', goFS, true);
+    }
+    document.addEventListener('click', goFS, true);
+    document.addEventListener('touchstart', goFS, true);
+  })();
+  </script>
 </body>
 </html>

@@ -424,6 +424,56 @@ body {
 }
 .bottombar-btn--stop:active { background: rgba(225,25,0,0.18); }
 
+/* Toggle switch in bottom bar */
+.bottombar-toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  padding: 8px 14px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  background: var(--surface-2);
+  -webkit-tap-highlight-color: transparent;
+  position: relative;
+}
+.bottombar-toggle input { display: none; }
+.toggle-slider {
+  width: 36px;
+  height: 20px;
+  background: #333;
+  border-radius: 10px;
+  position: relative;
+  transition: background 0.25s;
+  flex-shrink: 0;
+}
+.toggle-slider::before {
+  content: '';
+  position: absolute;
+  width: 16px;
+  height: 16px;
+  left: 2px;
+  top: 2px;
+  background: #888;
+  border-radius: 50%;
+  transition: transform 0.25s var(--spring), background 0.25s;
+}
+.bottombar-toggle input:checked + .toggle-slider {
+  background: var(--green);
+}
+.bottombar-toggle input:checked + .toggle-slider::before {
+  transform: translateX(16px);
+  background: #fff;
+}
+.toggle-label {
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: var(--text-2);
+  white-space: nowrap;
+  letter-spacing: 0.3px;
+  text-transform: uppercase;
+}
+
 /* =============================================
    IDENTITY MODAL (bottom sheet)
    ============================================= */

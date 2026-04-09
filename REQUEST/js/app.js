@@ -103,9 +103,9 @@ function isNightTime(){
   return hour >= nightStart || hour < 6;
 }
 
-// Calculate price per person and total
+// Calculate price per person and total (with multi-stop pricing)
 function calculatePrice(passengers){
-  const defaults = { normalDay: 20, normalNight: 30, hikeDay: 35, hikeNight: 50 };
+  const defaults = { normalDay: 20, normalNight: 30, hikeDay: 35, hikeNight: 50, baseFare: 0, pricePerStop: 5 };
   const p = pricing || defaults;
   // Hike zone applies if pickup OR any stop/destination is inside a hike zone
   let inHike = lastKnownLatLng ? isInHikeZone(lastKnownLatLng) : false;
@@ -121,7 +121,12 @@ function calculatePrice(passengers){
   } else {
     pp = night ? (p.normalNight || defaults.normalNight) : (p.normalDay || defaults.normalDay);
   }
-  return { pricePerPerson: pp, total: pp * passengers, isHikeZone: inHike, isNight: night };
+  const baseFare = typeof p.baseFare === 'number' ? p.baseFare : defaults.baseFare;
+  const pricePerStop = typeof p.pricePerStop === 'number' ? p.pricePerStop : defaults.pricePerStop;
+  const stopCount = stops.length;
+  // total = baseFare + (pricePerStop × stops) + (pricePerPerson × passengers)
+  const total = baseFare + (pricePerStop * stopCount) + (pp * passengers);
+  return { pricePerPerson: pp, total, isHikeZone: inHike, isNight: night, baseFare, pricePerStop, stopCount };
 }
 
 // ===== Account management =====
@@ -271,7 +276,16 @@ function updatePriceDisplay(){
   const paxLabel = document.getElementById('pricePaxLabel');
   const zoneBadge = document.getElementById('priceZoneBadge');
   const totalDisplay = document.getElementById('priceTotalDisplay');
-  if (paxLabel) paxLabel.textContent = `${selectedPassengers} × R${priceInfo.pricePerPerson}`;
+  // Build breakdown: "Base: R{x} + {n} stops × R{y} + {p} pax × R{z}"
+  let breakdown = '';
+  if (priceInfo.baseFare > 0) breakdown += `Base R${priceInfo.baseFare}`;
+  if (priceInfo.stopCount > 0 && priceInfo.pricePerStop > 0) {
+    if (breakdown) breakdown += ' + ';
+    breakdown += `${priceInfo.stopCount} stop${priceInfo.stopCount > 1 ? 's' : ''} × R${priceInfo.pricePerStop}`;
+  }
+  if (breakdown) breakdown += ' + ';
+  breakdown += `${selectedPassengers} × R${priceInfo.pricePerPerson}`;
+  if (paxLabel) paxLabel.textContent = breakdown;
   if (zoneBadge) zoneBadge.style.display = priceInfo.isHikeZone ? '' : 'none';
   if (totalDisplay) totalDisplay.textContent = `R${priceInfo.total}`;
 }
@@ -512,6 +526,7 @@ function ensureMapClick() {
       const km = (result.distance / 1000).toFixed(2);
       const mins = Math.round(result.duration / 60);
       showRidePanel(km, mins);
+      updatePriceDisplay(); // Recalculate price dynamically when stops change
       setStatus(`Route: ${km} km · ~${mins} min`);
     } catch (err) {
       // Revert the stop we just added on failure
@@ -575,49 +590,100 @@ function attachRequestListener(requestId){
   try{ if (myRequestUnsub) myRequestUnsub(); }catch(e){}
   myRequestUnsub = onValue(rRef, async (snap) => {
     const data = snap.val();
-    const statusEl = ensureRideStatusEl();
+    const overlay = document.getElementById('rideOverlay');
+    const overlayMsg = document.getElementById('rideOverlayMsg');
+    const overlaySub = document.getElementById('rideOverlaySub');
+    const overlayIcon = document.getElementById('rideOverlayIcon');
+
+    // --- Request deleted (driver completed + removed) ---
     if (!data) {
-      // request removed (likely completed by driver) — clear UI immediately
       try{ localStorage.removeItem('myRequestId'); }catch(e){}
       try{ if (myDriverUnsub) myDriverUnsub(); }catch(e){}
-      // remove status element if present
-      const rs = document.getElementById('rideStatus'); if (rs) rs.remove();
-      hideRidePanel();
-      showToast('Ride completed');
+      // Show "ride complete" overlay briefly then dismiss
+      showRideOverlay('🎉', 'RIDE COMPLETE', 'THANK YOU FOR USING US', 'complete');
+      setTimeout(() => { hideRideOverlay(); cleanupAfterRide(); }, 5000);
       return;
     }
-    if (data.status === 'completed'){
+
+    const status = data.status || '';
+
+    // --- Completed status (before removal) ---
+    if (status === 'completed') {
       try{ localStorage.removeItem('myRequestId'); }catch(e){}
       try{ if (myDriverUnsub) myDriverUnsub(); }catch(e){}
-      const rs = document.getElementById('rideStatus'); if (rs) rs.remove();
-      hideRidePanel();
-      showToast('Ride completed');
+      showRideOverlay('🎉', 'RIDE COMPLETE', 'THANK YOU FOR USING US', 'complete');
+      setTimeout(() => { hideRideOverlay(); cleanupAfterRide(); }, 5000);
       return;
     }
-    if (data.acceptedBy) {
-      // show driver ETA — fetch driver location and subscribe to updates
+
+    // --- In progress ---
+    if (status === 'in_progress') {
+      try{ if (myDriverUnsub) myDriverUnsub(); }catch(e){}
+      showRideOverlay('🚗', 'YOUR RIDE IS IN PROGRESS', '', '');
+      return;
+    }
+
+    // --- Accepted: driver on the way ---
+    if (data.acceptedBy && status === 'accepted') {
+      showRideOverlay('🚗', 'DRIVER ON THE WAY TO YOU', 'Calculating ETA…', '');
+      // subscribe to driver location for ETA
       const driverId = data.acceptedBy;
-      if (statusEl) statusEl.textContent = 'Driver assigned — calculating ETA…';
-      // detach previous driver listener
       try{ if (myDriverUnsub) myDriverUnsub(); }catch(e){}
       const dRef = ref(database, 'drivers/' + driverId);
       myDriverUnsub = onValue(dRef, (dSnap) => {
         const dv = dSnap.val() || {};
         const driverPos = (typeof dv.lat === 'number' && typeof dv.lng === 'number') ? { lat: dv.lat, lng: dv.lng } : null;
-        // prefer pickup origin if available
-        const origin = data.origin ? { lat: data.origin.lat, lng: data.origin.lng } : (data.lat ? { lat: data.lat, lng: data.lng } : null);
+        const origin = data.origin ? { lat: data.origin.lat, lng: data.origin.lng } : null;
         if (driverPos && origin) {
           const meters = distanceMeters(driverPos, origin);
           const mins = estimateMinutesFromMeters(meters);
-          if (statusEl) statusEl.textContent = `Driver is on the way — ETA ~${mins} min`;
-        } else if (statusEl) {
-          statusEl.textContent = 'Driver is on the way';
+          const subEl = document.getElementById('rideOverlaySub');
+          if (subEl) subEl.textContent = `ETA ~${mins} min`;
         }
       });
-    } else {
-      if (statusEl) statusEl.textContent = 'Waiting for a driver to accept your request';
+      return;
     }
+
+    // --- Waiting for driver (no acceptedBy) ---
+    showRideOverlay('⏳', 'WAITING FOR A DRIVER', '', 'waiting');
+    // NO ETA shown during waiting state
+    try{ if (myDriverUnsub) myDriverUnsub(); }catch(e){}
   });
+}
+
+// --- Overlay helpers ---
+function showRideOverlay(icon, msg, sub, iconClass) {
+  const overlay = document.getElementById('rideOverlay');
+  const overlayMsg = document.getElementById('rideOverlayMsg');
+  const overlaySub = document.getElementById('rideOverlaySub');
+  const overlayIcon = document.getElementById('rideOverlayIcon');
+  if (!overlay) return;
+  if (overlayIcon) {
+    overlayIcon.textContent = icon;
+    overlayIcon.className = 'ride-overlay-icon' + (iconClass ? ' ' + iconClass : '');
+  }
+  if (overlayMsg) overlayMsg.textContent = msg;
+  if (overlaySub) overlaySub.textContent = sub || '';
+  overlay.classList.remove('hidden');
+  // Block map interaction
+  const mapContainer = document.querySelector('.leaflet-container');
+  if (mapContainer) mapContainer.style.pointerEvents = 'none';
+}
+
+function hideRideOverlay() {
+  const overlay = document.getElementById('rideOverlay');
+  if (overlay) overlay.classList.add('hidden');
+  // Restore map interaction
+  const mapContainer = document.querySelector('.leaflet-container');
+  if (mapContainer) mapContainer.style.pointerEvents = '';
+}
+
+function cleanupAfterRide() {
+  hideRidePanel();
+  const rs = document.getElementById('rideStatus');
+  if (rs) rs.remove();
+  myRequestId = null;
+  showToast('Ride completed');
 }
 
 // attach listener on load if we have an outstanding request

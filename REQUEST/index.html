@@ -159,7 +159,30 @@
     <span id="badgeName"></span>
   </div>
 
+  <!-- ===== RIDE STATE OVERLAY (full-screen, blocks all interaction) ===== -->
+  <div id="rideOverlay" class="ride-overlay hidden">
+    <div class="ride-overlay-content">
+      <div class="ride-overlay-icon" id="rideOverlayIcon"></div>
+      <div class="ride-overlay-msg" id="rideOverlayMsg"></div>
+      <div class="ride-overlay-sub" id="rideOverlaySub"></div>
+    </div>
+  </div>
+
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <script type="module" src="js/app.js"></script>
+  <script>
+  (function(){
+    try { if (sessionStorage.getItem('mzala_fs') !== '1') return; } catch(e){ return; }
+    function goFS(){
+      var el = document.documentElement;
+      var fn = el.requestFullscreen || el.webkitRequestFullscreen || el.msRequestFullscreen;
+      if (fn) try { fn.call(el); } catch(e){}
+      document.removeEventListener('click', goFS, true);
+      document.removeEventListener('touchstart', goFS, true);
+    }
+    document.addEventListener('click', goFS, true);
+    document.addEventListener('touchstart', goFS, true);
+  })();
+  </script>
 </body>
 </html>
