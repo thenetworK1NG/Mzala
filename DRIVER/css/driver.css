@@ -720,6 +720,7 @@ body {
 /* =============================================
    TRIP SUMMARY MODAL
    ============================================= */
+#tripSummaryModal { z-index: 700; }
 .trip-summary-sheet {
   background: var(--surface);
   border-radius: var(--radius) var(--radius) 0 0;
@@ -752,6 +753,18 @@ body {
   text-transform: uppercase; letter-spacing: 0.5px;
 }
 .trip-hike-row span:last-child { color: #e67e22; }
+.trip-receipt-title {
+  font-size: 1rem; font-weight: 700; text-align: center;
+  margin-bottom: 12px; color: var(--text);
+}
+.trip-receipt.hidden { display: none; }
+.trip-payment-btn {
+  margin-top: 16px; width: 100%;
+  padding: 16px; border: none; border-radius: var(--pill);
+  background: var(--green); color: #fff; font-family: var(--font);
+  font-size: 1rem; font-weight: 700; cursor: pointer;
+  text-transform: uppercase; letter-spacing: 0.5px;
+}
 
 /* =============================================
    PANIC BUTTON

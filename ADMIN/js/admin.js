@@ -37,9 +37,17 @@ document.addEventListener('DOMContentLoaded', ()=>{
       } else {
         online = '<span style="color:#636366">Offline</span>';
       }
+      let activity = '';
+      if (d.online && d.active && d.rideStatus === 'picking_up') {
+        activity = ' · <span style="color:#f5a623">Picking up passenger</span>';
+      } else if (d.online && d.active && d.rideStatus === 'on_route') {
+        activity = ' · <span style="color:#276ef1">On route with passenger</span>';
+      } else if (d.online && d.active) {
+        activity = ' · <span style="color:#06c167">Waiting for rides</span>';
+      }
       const loc = (d.lat && d.lng) ? `${d.lat.toFixed(5)}, ${d.lng.toFixed(5)}` : 'no location';
       const hasLoc = typeof d.lat === 'number' && typeof d.lng === 'number';
-      el.innerHTML = `<div class="driver-info"><strong>${escapeHtml(d.name||'Unnamed')}</strong><div class="driver-meta">${online} · ${loc}</div></div>
+      el.innerHTML = `<div class="driver-info"><strong>${escapeHtml(d.name||'Unnamed')}</strong><div class="driver-meta">${online}${activity} · ${loc}</div></div>
         <div class="driver-actions">
           ${hasLoc ? `<button data-id="${escapeHtml(k)}" data-name="${escapeHtml(d.name||'Unnamed')}" data-lat="${d.lat}" data-lng="${d.lng}" class="locate">Locate</button>` : ''}
           ${hasLoc ? `<button data-id="${escapeHtml(k)}" data-name="${escapeHtml(d.name||'Unnamed')}" class="track">Track</button>` : ''}
@@ -549,15 +557,27 @@ document.addEventListener('DOMContentLoaded', ()=>{
 
   // ===== PANIC ALERTS =====
   const panicAlertsList = document.getElementById('panicAlertsList');
+  const panicPopup = document.getElementById('panicPopup');
+  const panicPopupList = document.getElementById('panicPopupList');
+  const distressSound = new Audio('sounds/distress.mp3');
+  distressSound.loop = true;
 
   function renderPanicAlerts(snapshot){
     const val = snapshot.val() || {};
     const keys = Object.keys(val).sort((a,b) => (val[b].timestamp||0) - (val[a].timestamp||0));
+
+    // In-page list (card section)
     panicAlertsList.innerHTML = '';
     if (!keys.length) {
       panicAlertsList.innerHTML = '<div class="panic-empty">No panic alerts</div>';
+      // Hide popup + stop sound
+      panicPopup.classList.add('hidden');
+      distressSound.pause();
+      distressSound.currentTime = 0;
       return;
     }
+
+    // Render in-page cards
     keys.forEach(k => {
       const a = val[k];
       const card = document.createElement('div');
@@ -573,6 +593,42 @@ document.addEventListener('DOMContentLoaded', ()=>{
       });
       card.appendChild(dismissBtn);
       panicAlertsList.appendChild(card);
+    });
+
+    // Show full-screen panic popup + play distress sound
+    panicPopup.classList.remove('hidden');
+    distressSound.play().catch(()=>{});
+
+    panicPopupList.innerHTML = '';
+    keys.forEach(k => {
+      const a = val[k];
+      const when = a.timestamp ? new Date(a.timestamp).toLocaleString() : 'Unknown time';
+      const hasLoc = typeof a.lat === 'number' && typeof a.lng === 'number';
+      const item = document.createElement('div');
+      item.className = 'panic-popup-item';
+      item.innerHTML = `<div class="panic-popup-driver">⚠ ${escapeHtml(a.driverName || 'Unknown driver')}</div>
+        <div class="panic-popup-time">${when}</div>
+        <div class="panic-popup-actions">
+          ${hasLoc ? `<button class="panic-view-btn" data-lat="${a.lat}" data-lng="${a.lng}" data-name="${escapeHtml(a.driverName || 'Unknown')}">View on Map</button>` : ''}
+          <button class="panic-seen-btn" data-key="${escapeHtml(k)}">I Have Seen This</button>
+        </div>`;
+      panicPopupList.appendChild(item);
+    });
+
+    panicPopupList.querySelectorAll('.panic-view-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const name = btn.getAttribute('data-name');
+        const lat = parseFloat(btn.getAttribute('data-lat'));
+        const lng = parseFloat(btn.getAttribute('data-lng'));
+        showDriverLocation(name, lat, lng);
+      });
+    });
+
+    panicPopupList.querySelectorAll('.panic-seen-btn').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        const key = btn.getAttribute('data-key');
+        try { await db.ref('panic_alerts/' + key).remove(); } catch(e){ console.error(e); }
+      });
     });
   }
 

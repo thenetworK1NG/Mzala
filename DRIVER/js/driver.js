@@ -73,6 +73,9 @@ try { mapMatchingEnabled = sessionStorage.getItem('roadSnap') === '1'; } catch(e
 // ===== Heading tracking for Garmin arrow =====
 let currentHeading = 0; // degrees, 0 = north
 
+// ===== Add Stop mode (disables map auto-center) =====
+let addingStopMode = false;
+
 // Snap GPS coords to nearest road via OSRM
 async function snapToRoad(lat, lng){
   try {
@@ -147,10 +150,6 @@ function renderItem(key, data, distanceMeters){
   const whenTs = data.timestamp || Date.now();
   const when = timeAgo(whenTs);
   const distText = (typeof distanceMeters === 'number') ? `${(distanceMeters/1000).toFixed(1)} km away` : `Distance unknown`;
-  // pickup summary
-  let pickup = 'Pickup location pending';
-  if (data.origin && typeof data.origin.lat === 'number') pickup = `${data.origin.lat.toFixed(4)}, ${data.origin.lng.toFixed(4)}`;
-  else if (data.lat && data.lng) pickup = `${data.lat.toFixed(4)}, ${data.lng.toFixed(4)}`;
   // rider info
   const riderName = (data.rider && data.rider.username) ? data.rider.username : 'Unknown rider';
   const riderPhone = (data.rider && data.rider.phone) ? data.rider.phone : '—';
@@ -164,29 +163,23 @@ function renderItem(key, data, distanceMeters){
   const priceText = data.totalPrice ? `R${data.totalPrice}` : '';
   const hikeTag = data.isHikeZone ? ' <span class="hike-tag">HIKE</span>' : '';
 
-  // Stops info
-  let stopsHtml = '';
-  if (data.stops && Array.isArray(data.stops) && data.stops.length > 1) {
-    stopsHtml = `<div class="stops-list">${data.stops.map((s, i) => `<span class="stop-chip">Stop ${i+1}: ${s.lat.toFixed(4)}, ${s.lng.toFixed(4)}</span>`).join('')}</div>`;
-  }
+  // Stop count (no coordinates)
+  const stopCount = (data.stops && Array.isArray(data.stops)) ? data.stops.length : 1;
+  const stopsText = stopCount === 1 ? '1 stop' : `${stopCount} stops`;
 
-  const leftHtml = `<div class="left"><div class="title">${riderName} <span class="pax-badge">${paxText}</span>${hikeTag}</div><div class="rider-phone">📞 ${riderPhone} ${waBtn}</div><div class="meta">${pickup} · ${when} · ${distText}${priceText ? ' · ' + priceText : ''}</div>${stopsHtml}</div>`;
-  // actions: Open, Accept/Complete depending on state
+  const leftHtml = `<div class="left"><div class="title">${riderName} <span class="pax-badge">${paxText}</span>${hikeTag}</div><div class="rider-phone">📞 ${riderPhone} ${waBtn}</div><div class="meta">${stopsText} · ${when} · ${distText}${priceText ? ' · ' + priceText : ''}</div></div>`;
+  // actions: View, Accept/In progress depending on state
   const actions = document.createElement('div');
   actions.className = 'actions';
-  const openBtn = document.createElement('button'); openBtn.className = 'go'; openBtn.textContent = 'Open';
+  const openBtn = document.createElement('button'); openBtn.className = 'go'; openBtn.textContent = 'View';
   openBtn.onclick = () => { showRequestOnMap(data, key); };
   actions.appendChild(openBtn);
 
-  // Accept button (only shown when not accepted) or Complete (when accepted by this driver)
   if (data && data.acceptedBy) {
     if (data.acceptedBy === selectedDriverId) {
-      const comp = document.createElement('button'); comp.className = 'complete'; comp.textContent = (data.status === 'completed') ? 'Completed' : 'Complete ride';
-      comp.disabled = (data.status === 'completed');
-      comp.onclick = () => { completeRequest(key); };
-      actions.appendChild(comp);
+      const prog = document.createElement('div'); prog.className = 'meta'; prog.style.color = '#06c167'; prog.style.fontWeight = '600'; prog.textContent = 'In progress';
+      actions.appendChild(prog);
     } else {
-      // accepted by someone else — mark as taken
       const taken = document.createElement('div'); taken.className = 'meta'; taken.style.color = '#c33'; taken.textContent = 'Taken'; actions.appendChild(taken);
     }
   } else {
@@ -222,7 +215,10 @@ async function acceptRequest(key){
     activeRideData = snap.val();
     activeRideKey = key;
     currentStopIndex = 0;
+    saveActiveRide();
     setStatus('Accepted request — opening map');
+    // Update driver rideStatus
+    try{ await update(ref(db, 'drivers/'+selectedDriverId), { rideStatus: 'picking_up' }); }catch(e){}
     // Auto-open the map modal and lock it
     await showRequestOnMap(activeRideData, key);
     lockMapModal();
@@ -249,7 +245,7 @@ async function completeRequest(key){
   }catch(e){ console.error('Complete failed', e); alert('Failed to complete request'); }
 }
 
-// ===== Trip Summary Modal =====
+// ===== Trip Summary Modal (two-step: Done → Receipt → Payment Received) =====
 function showTripSummary(rideData){
   return new Promise((resolve) => {
     const modal = document.getElementById('tripSummaryModal');
@@ -260,18 +256,44 @@ function showTripSummary(rideData){
     const hikeRow = document.getElementById('tripHikeRow');
     const totalEl = document.getElementById('tripTotal');
     const doneBtn = document.getElementById('tripSummaryDoneBtn');
+    const receiptSection = document.getElementById('tripReceipt');
+    const paymentBtn = document.getElementById('tripPaymentReceivedBtn');
+    // Populate summary
     if (riderEl) riderEl.textContent = (rideData.rider && rideData.rider.username) || 'Unknown';
     if (paxEl) paxEl.textContent = rideData.passengers || 1;
     if (stopsEl) stopsEl.textContent = (rideData.stops && rideData.stops.length) || 1;
     if (hikeRow) hikeRow.classList.toggle('hidden', !rideData.isHikeZone);
     if (totalEl) totalEl.textContent = `R${rideData.totalPrice || 0}`;
+    // Hide receipt initially
+    if (receiptSection) receiptSection.classList.add('hidden');
+    if (doneBtn) doneBtn.style.display = '';
     modal.style.display = 'flex';
-    const handler = () => {
-      doneBtn.removeEventListener('click', handler);
+    // Step 1: "Done" reveals receipt
+    const doneHandler = () => {
+      doneBtn.removeEventListener('click', doneHandler);
+      doneBtn.style.display = 'none';
+      // Populate receipt
+      const rateEl = document.getElementById('tripRate');
+      const rpaxEl = document.getElementById('tripReceiptPax');
+      const rstopsEl = document.getElementById('tripReceiptStops');
+      const rhikeRow = document.getElementById('tripReceiptHikeRow');
+      const rtotalEl = document.getElementById('tripReceiptTotal');
+      if (rateEl) rateEl.textContent = `R${rideData.pricePerPerson || 0}`;
+      if (rpaxEl) rpaxEl.textContent = rideData.passengers || 1;
+      if (rstopsEl) rstopsEl.textContent = (rideData.stops && rideData.stops.length) || 1;
+      if (rhikeRow) rhikeRow.classList.toggle('hidden', !rideData.isHikeZone);
+      if (rtotalEl) rtotalEl.textContent = `R${rideData.totalPrice || 0}`;
+      if (receiptSection) receiptSection.classList.remove('hidden');
+    };
+    if (doneBtn) doneBtn.addEventListener('click', doneHandler);
+    // Step 2: "Payment Received" completes and resolves
+    const payHandler = () => {
+      paymentBtn.removeEventListener('click', payHandler);
       modal.style.display = 'none';
+      if (receiptSection) receiptSection.classList.add('hidden');
       resolve();
     };
-    if (doneBtn) doneBtn.addEventListener('click', handler);
+    if (paymentBtn) paymentBtn.addEventListener('click', payHandler);
   });
 }
 
@@ -304,6 +326,9 @@ function clearActiveRide(){
   currentStopIndex = 0;
   lastNavFetchTime = 0;
   lastNavLatLng = null;
+  addingStopMode = false;
+  // Clear persisted ride state
+  try{ localStorage.removeItem('activeRide'); }catch(e){}
   // Clear nav route layer
   if (navRouteLayer && popupMap) { try{ popupMap.removeLayer(navRouteLayer); }catch(e){} navRouteLayer = null; }
   if (navTargetMarker && popupMap) { try{ popupMap.removeLayer(navTargetMarker); }catch(e){} navTargetMarker = null; }
@@ -316,6 +341,54 @@ function clearActiveRide(){
   if (panicBtn) { panicBtn.style.display = 'none'; panicBtn.classList.remove('pressing','sent'); }
   unlockMapModal();
   closeMapModal();
+  // Clear driver rideStatus
+  if (selectedDriverId) {
+    try{ update(ref(db, 'drivers/'+selectedDriverId), { rideStatus: null }); }catch(e){}
+  }
+}
+
+// ===== Persist / restore active ride to survive app exit =====
+function saveActiveRide(){
+  try{
+    localStorage.setItem('activeRide', JSON.stringify({
+      key: activeRideKey,
+      data: activeRideData,
+      stopIndex: currentStopIndex
+    }));
+  }catch(e){}
+}
+
+async function restoreActiveRide(){
+  try{
+    const raw = localStorage.getItem('activeRide');
+    if (!raw) return;
+    const saved = JSON.parse(raw);
+    if (!saved || !saved.key) return;
+    // Verify ride still exists in Firebase
+    const snap = await get(ref(db, 'ride_requests/' + saved.key));
+    const data = snap.val();
+    if (!data || data.status === 'completed' || !data.acceptedBy) {
+      localStorage.removeItem('activeRide');
+      return;
+    }
+    // Restore state
+    activeRideKey = saved.key;
+    activeRideData = data; // use fresh Firebase data
+    currentStopIndex = saved.stopIndex || 0;
+    setStatus('Resuming active ride…');
+    await showRequestOnMap(activeRideData, activeRideKey);
+    lockMapModal();
+    const state = activeRideData.status === 'picked_up' ? 'picked_up' : 'accepted';
+    showRideActionButtons(state);
+    if (state === 'picked_up') {
+      const navBanner = document.getElementById('navBanner');
+      if (navBanner) navBanner.style.display = 'flex';
+      lastNavFetchTime = 0;
+      lastNavLatLng = null;
+      updateNavigation();
+    }
+    setStatus(state === 'picked_up' ? 'Ride in progress — navigating' : 'Ride accepted — heading to pickup');
+  }catch(e){ console.error('Failed to restore active ride', e); }
 }
 
 // ===== Ride action button visibility =====
@@ -408,8 +481,8 @@ async function updateNavigation(){
   const now = Date.now();
   const moved = lastNavLatLng ? haversine(driverLatLng, lastNavLatLng) : Infinity;
   if (now - lastNavFetchTime < NAV_REROUTE_INTERVAL && moved < NAV_REROUTE_DISTANCE) {
-    // Just update map center to follow driver
-    try { popupMap.setView([driverLatLng.lat, driverLatLng.lng], Math.max(popupMap.getZoom(), 16)); } catch(e){}
+    // Just update map center to follow driver (skip if placing a new stop)
+    if (!addingStopMode) { try { popupMap.setView([driverLatLng.lat, driverLatLng.lng], Math.max(popupMap.getZoom(), 16)); } catch(e){} }
     return;
   }
   lastNavFetchTime = now;
@@ -429,8 +502,8 @@ async function updateNavigation(){
   } else if (route.legs && route.legs[0] && route.legs[0].steps && route.legs[0].steps.length === 1) {
     updateNavBanner('Arriving at destination', route.legs[0].distance, null, 'arrive');
   }
-  // Center map on driver position at street level
-  try { popupMap.setView([driverLatLng.lat, driverLatLng.lng], Math.max(popupMap.getZoom(), 16)); } catch(e){}
+  // Center map on driver position at street level (skip if placing a new stop)
+  if (!addingStopMode) { try { popupMap.setView([driverLatLng.lat, driverLatLng.lng], Math.max(popupMap.getZoom(), 16)); } catch(e){} }
 }
 
 // Get the current navigation target (next stop or final destination)
@@ -896,6 +969,16 @@ async function startShift(){
     return;
   }
   if (!navigator.geolocation) { setStatus('Geolocation not supported'); return; }
+  // Check location permission before attempting geolocation
+  try {
+    if (navigator.permissions) {
+      const perm = await navigator.permissions.query({ name: 'geolocation' });
+      if (perm.state === 'denied') {
+        setStatus('Location access denied — please enable it in your browser settings');
+        return;
+      }
+    }
+  } catch(e) { /* permissions API not supported, continue anyway */ }
   setStatus('Starting shift — obtaining location…');
   try{
     // initial position
@@ -923,6 +1006,8 @@ async function startShift(){
     if (stopShiftBtn) stopShiftBtn.style.display = '';
     // hide main map by default
     const mapc = document.getElementById('map'); if (mapc) mapc.style.display = 'none';
+    // Restore active ride if one was in progress before app exit
+    await restoreActiveRide();
   }catch(e){ console.error('Start shift failed', e); setStatus('Start shift failed'); }
 }
 
@@ -997,6 +1082,9 @@ if (pickedUpBtn) pickedUpBtn.addEventListener('click', async () => {
   try {
     await update(ref(db, 'ride_requests/' + activeRideKey), { status: 'picked_up' });
     if (activeRideData) activeRideData.status = 'picked_up';
+    saveActiveRide();
+    // Update driver rideStatus
+    try{ await update(ref(db, 'drivers/'+selectedDriverId), { rideStatus: 'on_route' }); }catch(e){}
     showRideActionButtons('picked_up');
     // Start navigation to first stop/destination
     const navBanner = document.getElementById('navBanner');
@@ -1023,6 +1111,7 @@ if (nextStopBtn) nextStopBtn.addEventListener('click', async () => {
     await updateNavigation();
     // Update button visibility
     showRideActionButtons('picked_up');
+    saveActiveRide();
     setStatus(`Navigating to stop ${currentStopIndex + 1}`);
   }
 });
@@ -1041,9 +1130,11 @@ if (tripDoneBtn) tripDoneBtn.addEventListener('click', async () => {
 const addStopMidBtn = document.getElementById('addStopMidBtn');
 if (addStopMidBtn) addStopMidBtn.addEventListener('click', () => {
   if (!activeRideKey || !activeRideData || !popupMap) return;
-  setStatus('Tap the map to add a new stop');
+  addingStopMode = true;
+  setStatus('Tap the map to add a new stop (pan freely)');
   const onMapClick = async (e) => {
     popupMap.off('click', onMapClick);
+    addingStopMode = false;
     const newStop = { lat: e.latlng.lat, lng: e.latlng.lng };
     // Insert as the next stop after currentStopIndex
     if (!activeRideData.stops) activeRideData.stops = [];
@@ -1066,10 +1157,12 @@ if (addStopMidBtn) addStopMidBtn.addEventListener('click', () => {
       lastNavLatLng = null;
       await updateNavigation();
       showRideActionButtons('picked_up');
+      saveActiveRide();
       setStatus('Stop added');
     } catch(err) {
       console.error('Failed to add stop', err);
       activeRideData.stops.splice(insertIdx, 1); // revert
+      addingStopMode = false;
       setStatus('Failed to add stop');
     }
   };

@@ -12,7 +12,7 @@
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="css/styles.css">
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
-  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🚗</text></svg>" />
+  <link rel="icon" href="icon.png" type="image/png" />
 </head>
 <body>
 
@@ -166,11 +166,48 @@
     <span id="badgeName"></span>
   </div>
 
+  <!-- ===== FIRST-TIME TUTORIAL OVERLAY ===== -->
+  <div id="tutorialOverlay" class="tutorial-overlay hidden">
+    <div class="tutorial-card">
+      <div class="tutorial-step" data-step="1">
+        <div class="tutorial-icon">📍</div>
+        <h3>Set Your Pickup</h3>
+        <p>Your current location is used as the pickup point. Make sure your GPS is on.</p>
+      </div>
+      <div class="tutorial-step hidden" data-step="2">
+        <div class="tutorial-icon">🗺️</div>
+        <h3>Tap Your Destination</h3>
+        <p>Tap anywhere on the map to set where you want to go. You can add multiple stops!</p>
+      </div>
+      <div class="tutorial-step hidden" data-step="3">
+        <div class="tutorial-icon">👥</div>
+        <h3>Select Passengers</h3>
+        <p>Choose how many people are riding. The price adjusts per person.</p>
+      </div>
+      <div class="tutorial-step hidden" data-step="4">
+        <div class="tutorial-icon">🚗</div>
+        <h3>Book & Wait</h3>
+        <p>Tap Book Ride and wait for a driver to accept. You'll be notified when one does!</p>
+      </div>
+      <div class="tutorial-dots">
+        <span class="tutorial-dot active" data-dot="1"></span>
+        <span class="tutorial-dot" data-dot="2"></span>
+        <span class="tutorial-dot" data-dot="3"></span>
+        <span class="tutorial-dot" data-dot="4"></span>
+      </div>
+      <div class="tutorial-actions">
+        <button id="tutorialSkipBtn" class="tutorial-skip">Skip</button>
+        <button id="tutorialNextBtn" class="tutorial-next">Next</button>
+      </div>
+    </div>
+  </div>
+
   <!-- ===== RIDE STATUS OVERLAY (blocks all interaction during ride lifecycle) ===== -->
   <div id="rideOverlay" class="ride-overlay" style="display:none">
     <div class="ride-overlay-content">
       <div class="ride-overlay-icon">🚗</div>
       <div class="ride-overlay-msg" id="rideOverlayMsg">WAITING FOR A DRIVER</div>
+      <div class="ride-overlay-sub" id="rideOverlaySub"></div>
       <!-- Receipt (shown on ride complete) -->
       <div id="rideReceipt" class="ride-receipt hidden">
         <div class="receipt-divider"></div>

@@ -453,6 +453,91 @@ header span { color: var(--green); }
 }
 .panic-card .panic-dismiss:hover { background: rgba(255,255,255,0.05); }
 
+/* ===== PANIC POPUP MODAL ===== */
+.panic-popup {
+  position: fixed; inset: 0; z-index: 7000;
+  background: rgba(120,0,0,0.85);
+  display: flex; align-items: center; justify-content: center;
+  padding: 20px;
+  animation: panicFadeIn 0.3s ease;
+}
+.panic-popup.hidden { display: none; }
+@keyframes panicFadeIn { from { opacity: 0; } to { opacity: 1; } }
+@keyframes panicPulse { 0%,100% { transform: scale(1); } 50% { transform: scale(1.12); } }
+
+.panic-popup-inner {
+  background: var(--surface, #141414);
+  border: 2px solid var(--red, #e11900);
+  border-radius: var(--radius, 16px);
+  width: 100%; max-width: 420px;
+  padding: 28px 24px 20px;
+  text-align: center;
+  animation: locSlideUp 0.35s cubic-bezier(0.16,1,0.3,1);
+}
+
+.panic-popup-icon {
+  font-size: 3rem;
+  animation: panicPulse 1s ease-in-out infinite;
+  margin-bottom: 4px;
+}
+
+.panic-popup-title {
+  font-size: 1.3rem; font-weight: 800;
+  color: var(--red, #e11900);
+  letter-spacing: 0.06em;
+  margin: 0 0 18px;
+}
+
+.panic-popup-list {
+  display: flex; flex-direction: column; gap: 12px;
+  max-height: 55vh; overflow-y: auto;
+}
+
+.panic-popup-item {
+  background: rgba(225,25,0,0.08);
+  border: 1px solid rgba(225,25,0,0.25);
+  border-radius: var(--radius-sm, 12px);
+  padding: 14px 16px;
+  text-align: left;
+}
+
+.panic-popup-driver {
+  font-weight: 700; font-size: 0.95rem;
+  color: var(--red, #e11900);
+  margin-bottom: 2px;
+}
+
+.panic-popup-time {
+  font-size: 0.78rem;
+  color: var(--text-muted, #636366);
+  margin-bottom: 10px;
+}
+
+.panic-popup-actions {
+  display: flex; gap: 8px;
+}
+
+.panic-popup-actions button {
+  flex: 1; padding: 8px 0;
+  border-radius: 999px; font-size: 0.78rem;
+  font-weight: 600; cursor: pointer;
+  font-family: var(--font);
+  transition: background 0.15s;
+}
+
+.panic-view-btn {
+  background: var(--red, #e11900);
+  color: #fff; border: none;
+}
+.panic-view-btn:hover { opacity: 0.85; }
+
+.panic-seen-btn {
+  background: transparent;
+  color: var(--text-muted, #636366);
+  border: 1px solid var(--border, rgba(255,255,255,0.08));
+}
+.panic-seen-btn:hover { background: rgba(255,255,255,0.05); }
+
 /* ===== MOBILE ===== */
 @media (max-width: 600px) {
   .container { padding: 0 10px 40px; }

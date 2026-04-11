@@ -35,6 +35,9 @@ let hikeZones = null; // { key: { lat, lng, radiusKm }, ... }
 const acceptedSound = new Audio('sounds/accepted.mp3');
 let acceptedSoundPlayed = false;
 
+// Booked sound
+const bookedSound = new Audio('sounds/booked.mp3');
+
 // Last known ride data for receipt (captured before Firebase deletes it)
 let lastRideData = null;
 
@@ -220,6 +223,10 @@ function initAccountUI(){
       hideAccountModal();
       showAccountBadge(riderAccount);
       showToast('Account created');
+      // Show tutorial for first-time users
+      if (!localStorage.getItem('tutorialSeen')) {
+        showTutorial();
+      }
     }catch(err){
       errorEl.textContent = err.message;
       errorEl.classList.remove('hidden');
@@ -321,6 +328,18 @@ document.addEventListener('DOMContentLoaded', () => {
         map = createMap('map');
         ensureMapClick();
       }
+      // Check location permission
+      try {
+        if (navigator.permissions) {
+          const perm = await navigator.permissions.query({ name: 'geolocation' });
+          if (perm.state === 'denied') {
+            if (loader) loader.classList.add('hidden');
+            if (landing) landing.classList.remove('hidden');
+            setStatus('Location access denied — please enable it in your browser settings');
+            return;
+          }
+        }
+      } catch(e) { /* permissions API not supported, continue */ }
       try {
         const res = await locateOnce(map);
         if (res && res.marker) lastKnownLatLng = res.marker.getLatLng();
@@ -515,6 +534,7 @@ function initBookingUI(){
       myRequestId = newReq.key;
       try{ localStorage.setItem('myRequestId', myRequestId); }catch(e){}
       attachRequestListener(myRequestId);
+      bookedSound.play().catch(()=>{});
       showToast('Ride booked!');
       setStatus('Ride requested.');
       bookRideBtn.disabled = true;
@@ -612,13 +632,15 @@ function estimateMinutesFromMeters(m){
 }
 
 // ===== Ride overlay state machine =====
-function showRideOverlay(message){
+function showRideOverlay(message, subMessage){
   const overlay = document.getElementById('rideOverlay');
   const msgEl = document.getElementById('rideOverlayMsg');
+  const subEl = document.getElementById('rideOverlaySub');
   const receipt = document.getElementById('rideReceipt');
   const doneBtn = document.getElementById('rideDoneBtn');
   if (overlay) overlay.style.display = 'flex';
   if (msgEl) msgEl.textContent = message;
+  if (subEl) subEl.textContent = subMessage || '';
   // Hide receipt and done button by default
   if (receipt) receipt.classList.add('hidden');
   if (doneBtn) doneBtn.classList.add('hidden');
@@ -688,7 +710,7 @@ function attachRequestListener(requestId){
   try{ if (myDriverUnsub) myDriverUnsub(); myDriverUnsub = null; }catch(e){}
 
   // Show initial waiting overlay
-  showRideOverlay('WAITING FOR A DRIVER');
+  showRideOverlay('WAITING FOR A DRIVER', 'You can turn off your location now. Please keep this screen open to see when your driver accepts.');
 
   myRequestUnsub = onValue(rRef, (snap) => {
     const data = snap.val();
@@ -723,7 +745,7 @@ function attachRequestListener(requestId){
       return;
     }
     // No driver yet — waiting
-    showRideOverlay('WAITING FOR A DRIVER');
+    showRideOverlay('WAITING FOR A DRIVER', 'You can turn off your location now. Please keep this screen open to see when your driver accepts.');
   });
 }
 
@@ -736,7 +758,11 @@ document.addEventListener('DOMContentLoaded', () => {
 // attach listener on load if we have an outstanding request
 try{
   const saved = localStorage.getItem('myRequestId');
-  if (saved) { myRequestId = saved; attachRequestListener(saved); }
+  if (saved) {
+    myRequestId = saved;
+    hideRidePanel();
+    attachRequestListener(saved);
+  }
 }catch(e){}
 
 function hideRidePanel() {
@@ -759,6 +785,34 @@ function showMapUI() {
 
 function setStatus(msg) {
   if (statusEl) statusEl.textContent = msg;
+}
+
+// ===== First-time Tutorial =====
+function showTutorial(){
+  const overlay = document.getElementById('tutorialOverlay');
+  if (!overlay) return;
+  overlay.classList.remove('hidden');
+  let current = 1;
+  const totalSteps = 4;
+  const updateStep = () => {
+    overlay.querySelectorAll('.tutorial-step').forEach(s => {
+      s.classList.toggle('hidden', parseInt(s.dataset.step) !== current);
+    });
+    overlay.querySelectorAll('.tutorial-dot').forEach(d => {
+      d.classList.toggle('active', parseInt(d.dataset.dot) === current);
+    });
+    const nextBtn = document.getElementById('tutorialNextBtn');
+    if (nextBtn) nextBtn.textContent = current === totalSteps ? 'Got it!' : 'Next';
+  };
+  const close = () => {
+    overlay.classList.add('hidden');
+    try{ localStorage.setItem('tutorialSeen', '1'); }catch(e){}
+  };
+  const nextBtn = document.getElementById('tutorialNextBtn');
+  const skipBtn = document.getElementById('tutorialSkipBtn');
+  if (nextBtn) nextBtn.onclick = () => { if (current < totalSteps) { current++; updateStep(); } else { close(); } };
+  if (skipBtn) skipBtn.onclick = close;
+  updateStep();
 }
 
 // ===== Route Bookmarks (localStorage) =====

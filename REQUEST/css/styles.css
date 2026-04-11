@@ -344,6 +344,7 @@ body {
 .ride-actions {
   display: flex;
   gap: 10px;
+  flex-wrap: wrap;
 }
 
 .ride-request-btn {
@@ -825,6 +826,17 @@ body {
   letter-spacing: 0.5px;
   text-transform: uppercase;
 }
+.ride-overlay-sub {
+  font-family: var(--font);
+  font-size: 0.85rem;
+  font-weight: 500;
+  color: rgba(255,255,255,0.6);
+  line-height: 1.5;
+  margin-top: 12px;
+  max-width: 280px;
+  margin-left: auto;
+  margin-right: auto;
+}
 @keyframes ride-pulse {
   0%, 100% { transform: scale(1); opacity: 1; }
   50% { transform: scale(1.1); opacity: 0.7; }
@@ -899,16 +911,20 @@ body {
    ============================================= */
 .ride-removestop-btn {
   flex: 1;
-  padding: 14px;
+  min-width: 0;
+  padding: 12px 10px;
   border-radius: var(--radius-sm);
   border: 1px solid rgba(225,25,0,0.25);
   background: rgba(225,25,0,0.08);
   color: var(--red);
   font-family: var(--font);
-  font-size: 0.9rem;
+  font-size: 0.82rem;
   font-weight: 600;
   cursor: pointer;
   transition: background 0.15s;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 .ride-removestop-btn:active { background: rgba(225,25,0,0.15); }
 
@@ -916,8 +932,8 @@ body {
    SAVE ROUTE BUTTON
    ============================================= */
 .ride-save-btn {
-  width: 52px;
-  height: 52px;
+  width: 44px;
+  height: 44px;
   border-radius: var(--radius-sm);
   border: 1px solid var(--border);
   background: var(--surface-2);
@@ -995,6 +1011,55 @@ body {
   color: var(--text-muted);
   padding: 24px 16px;
   line-height: 1.5;
+}
+
+/* =============================================
+   FIRST-TIME TUTORIAL
+   ============================================= */
+.tutorial-overlay {
+  position: fixed; inset: 0; z-index: 10000;
+  background: rgba(0,0,0,0.85);
+  display: flex; align-items: center; justify-content: center;
+  padding: 24px;
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+}
+.tutorial-overlay.hidden { display: none; }
+.tutorial-card {
+  background: var(--surface); border-radius: var(--radius);
+  padding: 32px 24px; text-align: center; max-width: 340px; width: 100%;
+  animation: sheet-up 0.4s var(--spring);
+}
+.tutorial-step.hidden { display: none; }
+.tutorial-icon { font-size: 2.5rem; margin-bottom: 16px; }
+.tutorial-card h3 {
+  font-size: 1.15rem; font-weight: 800; color: var(--text);
+  margin-bottom: 8px;
+}
+.tutorial-card p {
+  font-size: 0.88rem; color: var(--text-muted); line-height: 1.5;
+  margin-bottom: 24px;
+}
+.tutorial-dots {
+  display: flex; justify-content: center; gap: 8px; margin-bottom: 20px;
+}
+.tutorial-dot {
+  width: 8px; height: 8px; border-radius: 50%;
+  background: var(--surface-3); transition: background 0.2s;
+}
+.tutorial-dot.active { background: var(--green); }
+.tutorial-actions { display: flex; gap: 12px; justify-content: center; }
+.tutorial-skip {
+  padding: 12px 24px; border: none; border-radius: var(--pill);
+  background: var(--surface-2); color: var(--text-muted);
+  font-family: var(--font); font-size: 0.9rem; font-weight: 600;
+  cursor: pointer;
+}
+.tutorial-next {
+  padding: 12px 32px; border: none; border-radius: var(--pill);
+  background: var(--green); color: #fff;
+  font-family: var(--font); font-size: 0.9rem; font-weight: 700;
+  cursor: pointer;
 }
 
 /* =============================================

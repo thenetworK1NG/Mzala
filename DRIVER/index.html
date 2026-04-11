@@ -12,7 +12,7 @@
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
   <link rel="stylesheet" href="css/driver.css" />
-  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🚗</text></svg>" />
+  <link rel="icon" href="icon.png" type="image/png" />
 </head>
 <body>
 
@@ -149,6 +149,20 @@
         <div class="trip-row trip-total"><span>Total</span><span id="tripTotal">—</span></div>
       </div>
       <button id="tripSummaryDoneBtn" class="btn-solid trip-done-btn">Done</button>
+      <!-- Receipt section (revealed after Done) -->
+      <div id="tripReceipt" class="trip-receipt hidden">
+        <div class="trip-divider" style="margin:16px 0"></div>
+        <h3 class="trip-receipt-title">Receipt</h3>
+        <div class="trip-summary-body">
+          <div class="trip-row"><span>Rate per person</span><span id="tripRate">—</span></div>
+          <div class="trip-row"><span>Passengers</span><span id="tripReceiptPax">—</span></div>
+          <div class="trip-row"><span>Stops</span><span id="tripReceiptStops">—</span></div>
+          <div class="trip-row trip-hike-row hidden" id="tripReceiptHikeRow"><span>Hike zone</span><span>Yes</span></div>
+          <div class="trip-divider"></div>
+          <div class="trip-row trip-total"><span>Total</span><span id="tripReceiptTotal">—</span></div>
+        </div>
+        <button id="tripPaymentReceivedBtn" class="btn-solid trip-payment-btn">Payment Received</button>
+      </div>
     </div>
   </div>
 
