@@ -19,6 +19,9 @@ let totalDurationS = 0;
 let selectedPassengers = 1;
 let addingStop = false;      // true when user is picking a new stop on map
 
+// Track whether location came from real GPS (not IP fallback)
+let locationIsGPS = false;
+
 // Current rider account (persisted in localStorage + Firebase)
 let riderAccount = null;
 
@@ -329,19 +332,29 @@ document.addEventListener('DOMContentLoaded', () => {
         ensureMapClick();
       }
       // Check location permission
+      const gpsOverlay = document.getElementById('gpsOverlay');
       try {
         if (navigator.permissions) {
           const perm = await navigator.permissions.query({ name: 'geolocation' });
           if (perm.state === 'denied') {
             if (loader) loader.classList.add('hidden');
             if (landing) landing.classList.remove('hidden');
-            setStatus('Location access denied — please enable it in your browser settings');
+            if (gpsOverlay) gpsOverlay.style.display = 'flex';
             return;
           }
         }
       } catch(e) { /* permissions API not supported, continue */ }
       try {
         const res = await locateOnce(map);
+        // Block IP fallback — require real GPS
+        if (res && res.fallback === 'ip') {
+          if (loader) loader.classList.add('hidden');
+          if (landing) landing.classList.remove('hidden');
+          if (gpsOverlay) gpsOverlay.style.display = 'flex';
+          locationIsGPS = false;
+          return;
+        }
+        locationIsGPS = true;
         if (res && res.marker) lastKnownLatLng = res.marker.getLatLng();
         // Animate loader out, then show map
         if (loader) {
@@ -358,9 +371,11 @@ document.addEventListener('DOMContentLoaded', () => {
         }
       } catch (err) {
         if (loader) loader.classList.add('hidden');
-        showMapUI();
-        if (map) map.invalidateSize();
-        setStatus('Location error: ' + (err && (err.message || err.code) ? (err.message || err.code) : 'unknown'));
+        const landing = document.getElementById('landing');
+        if (landing) landing.classList.remove('hidden');
+        const gpsOverlay = document.getElementById('gpsOverlay');
+        if (gpsOverlay) gpsOverlay.style.display = 'flex';
+        locationIsGPS = false;
       }
     });
   }
@@ -489,6 +504,13 @@ function initBookingUI(){
   if (bookRideBtn) bookRideBtn.addEventListener('click', async () => {
     if (!riderAccount) { showAccountModal(false); return; }
     if (!lastKnownLatLng || !stops.length) { setStatus('Missing origin or destination.'); return; }
+
+    // GPS check — block booking if location came from IP fallback
+    if (!locationIsGPS) {
+      const gpsOverlay = document.getElementById('gpsOverlay');
+      if (gpsOverlay) gpsOverlay.style.display = 'flex';
+      return;
+    }
 
     // Geofence check
     if (!isInsideGeofence(lastKnownLatLng)) {
@@ -900,3 +922,47 @@ document.addEventListener('DOMContentLoaded', () => {
     showToast('Route saved');
   });
 });
+
+// ===== GPS Retry Button =====
+const gpsRetryBtn = document.getElementById('gpsRetryBtn');
+if (gpsRetryBtn) gpsRetryBtn.addEventListener('click', () => {
+  const gpsOverlay = document.getElementById('gpsOverlay');
+  if (gpsOverlay) gpsOverlay.style.display = 'none';
+  // Re-trigger the bookBtn flow
+  const bookBtn = document.getElementById('bookBtn');
+  if (bookBtn) bookBtn.click();
+});
+
+// ===== PWA Install Prompt =====
+let deferredInstallPrompt = null;
+const installBtn = document.getElementById('installBtn');
+
+const isStandalone = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true;
+
+if (!isStandalone && installBtn) {
+  window.addEventListener('beforeinstallprompt', (e) => {
+    e.preventDefault();
+    deferredInstallPrompt = e;
+    installBtn.style.display = 'flex';
+  });
+
+  installBtn.addEventListener('click', async () => {
+    if (!deferredInstallPrompt) return;
+    deferredInstallPrompt.prompt();
+    const result = await deferredInstallPrompt.userChoice;
+    if (result.outcome === 'accepted') {
+      installBtn.style.display = 'none';
+    }
+    deferredInstallPrompt = null;
+  });
+}
+
+window.addEventListener('appinstalled', () => {
+  if (installBtn) installBtn.style.display = 'none';
+  deferredInstallPrompt = null;
+});
+
+// ===== Service Worker Registration =====
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.register('./sw.js').catch(err => console.error('SW registration failed', err));
+}

@@ -968,13 +968,17 @@ async function startShift(){
     if (identityModal) identityModal.style.display = 'flex';
     return;
   }
-  if (!navigator.geolocation) { setStatus('Geolocation not supported'); return; }
+  const gpsOverlay = document.getElementById('gpsOverlay');
+  if (!navigator.geolocation) {
+    if (gpsOverlay) gpsOverlay.style.display = 'flex';
+    return;
+  }
   // Check location permission before attempting geolocation
   try {
     if (navigator.permissions) {
       const perm = await navigator.permissions.query({ name: 'geolocation' });
       if (perm.state === 'denied') {
-        setStatus('Location access denied — please enable it in your browser settings');
+        if (gpsOverlay) gpsOverlay.style.display = 'flex';
         return;
       }
     }
@@ -1008,10 +1012,22 @@ async function startShift(){
     const mapc = document.getElementById('map'); if (mapc) mapc.style.display = 'none';
     // Restore active ride if one was in progress before app exit
     await restoreActiveRide();
-  }catch(e){ console.error('Start shift failed', e); setStatus('Start shift failed'); }
+  }catch(e){
+    console.error('Start shift failed', e);
+    const gpsOverlay = document.getElementById('gpsOverlay');
+    if (gpsOverlay) gpsOverlay.style.display = 'flex';
+  }
 }
 
 if (startShiftBtn) startShiftBtn.addEventListener('click', startShift);
+
+// GPS retry button
+const gpsRetryBtn = document.getElementById('gpsRetryBtn');
+if (gpsRetryBtn) gpsRetryBtn.addEventListener('click', () => {
+  const gpsOverlay = document.getElementById('gpsOverlay');
+  if (gpsOverlay) gpsOverlay.style.display = 'none';
+  startShift();
+});
 
 // Stop shift (clean shutdown)
 async function stopShift(){
@@ -1207,4 +1223,39 @@ if (panicBtnEl) {
   panicBtnEl.addEventListener('mouseleave', cancelPanic);
   panicBtnEl.addEventListener('touchend', cancelPanic);
   panicBtnEl.addEventListener('touchcancel', cancelPanic);
+}
+
+// ===== PWA Install Prompt =====
+let deferredInstallPrompt = null;
+const installBtn = document.getElementById('installBtn');
+
+// Hide install button if already running as installed PWA
+const isStandalone = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true;
+
+if (!isStandalone && installBtn) {
+  window.addEventListener('beforeinstallprompt', (e) => {
+    e.preventDefault();
+    deferredInstallPrompt = e;
+    installBtn.style.display = 'flex';
+  });
+
+  installBtn.addEventListener('click', async () => {
+    if (!deferredInstallPrompt) return;
+    deferredInstallPrompt.prompt();
+    const result = await deferredInstallPrompt.userChoice;
+    if (result.outcome === 'accepted') {
+      installBtn.style.display = 'none';
+    }
+    deferredInstallPrompt = null;
+  });
+}
+
+window.addEventListener('appinstalled', () => {
+  if (installBtn) installBtn.style.display = 'none';
+  deferredInstallPrompt = null;
+});
+
+// ===== Service Worker Registration =====
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.register('./sw.js').catch(err => console.error('SW registration failed', err));
 }

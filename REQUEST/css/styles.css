@@ -1063,6 +1063,56 @@ body {
 }
 
 /* =============================================
+   GPS OVERLAY
+   ============================================= */
+.gps-overlay {
+  position: fixed; inset: 0; z-index: 800;
+  display: flex; align-items: center; justify-content: center;
+  background: rgba(0,0,0,0.92);
+  backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
+  padding: 24px;
+}
+.gps-overlay-content {
+  display: flex; flex-direction: column; align-items: center;
+  text-align: center; max-width: 320px; gap: 16px;
+}
+.gps-overlay-icon { opacity: 0.9; }
+.gps-overlay-title {
+  font-size: 1.3rem; font-weight: 800; color: var(--text);
+  line-height: 1.3;
+}
+.gps-overlay-sub {
+  font-size: 0.88rem; color: var(--text-muted); line-height: 1.5;
+}
+.gps-retry-btn {
+  margin-top: 8px; padding: 14px 40px; border: none; border-radius: var(--pill);
+  background: var(--green); color: #000; font-family: var(--font);
+  font-size: 0.95rem; font-weight: 700; cursor: pointer;
+  transition: transform 0.15s, box-shadow 0.2s;
+}
+.gps-retry-btn:active { transform: scale(0.96); }
+
+/* =============================================
+   INSTALL BUTTON
+   ============================================= */
+.install-btn {
+  display: flex; align-items: center; justify-content: center; gap: 8px;
+  margin-top: 20px; padding: 12px 24px;
+  background: rgba(255,255,255,0.06); border: 1px solid var(--border-light);
+  border-radius: var(--pill); color: var(--text);
+  font-family: var(--font); font-size: 0.85rem; font-weight: 600;
+  cursor: pointer; transition: transform 0.15s, border-color 0.25s;
+}
+.install-btn:hover { border-color: var(--green); }
+.install-btn:active { transform: scale(0.96); }
+.install-btn svg { stroke: var(--green); }
+
+/* Hide install button when running as installed PWA */
+@media (display-mode: standalone) {
+  .install-btn { display: none !important; }
+}
+
+/* =============================================
    DESKTOP
    ============================================= */
 @media (min-width: 768px) {
