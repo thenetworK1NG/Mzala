@@ -26,10 +26,17 @@ let riderAccount = null;
 let geofence = null;
 
 // Pricing (loaded from Firebase settings/pricing)
-let pricing = null; // { normalDay, normalNight, hikeDay, hikeNight, nightStartHour }
+let pricing = null; // { normalDay, normalNight, hikeDay, hikeNight, nightStartHour, nightEndHour }
 
 // Hike zones (loaded from Firebase settings/hikeZones)
 let hikeZones = null; // { key: { lat, lng, radiusKm }, ... }
+
+// Accepted sound
+const acceptedSound = new Audio('sounds/accepted.mp3');
+let acceptedSoundPlayed = false;
+
+// Last known ride data for receipt (captured before Firebase deletes it)
+let lastRideData = null;
 
 // Firebase config
 const firebaseConfig = {
@@ -96,14 +103,15 @@ function isInHikeZone(latLng){
   return false;
 }
 
-// Determine if it's nighttime
+// Determine if it's nighttime (default 22:00–08:00)
 function isNightTime(){
   const hour = new Date().getHours();
   const nightStart = (pricing && typeof pricing.nightStartHour === 'number') ? pricing.nightStartHour : 22;
-  return hour >= nightStart || hour < 6;
+  const nightEnd = (pricing && typeof pricing.nightEndHour === 'number') ? pricing.nightEndHour : 8;
+  return hour >= nightStart || hour < nightEnd;
 }
 
-// Calculate price per person and total
+// Calculate price: rate × passengers × points booked
 function calculatePrice(passengers){
   const defaults = { normalDay: 20, normalNight: 30, hikeDay: 35, hikeNight: 50 };
   const p = pricing || defaults;
@@ -121,7 +129,9 @@ function calculatePrice(passengers){
   } else {
     pp = night ? (p.normalNight || defaults.normalNight) : (p.normalDay || defaults.normalDay);
   }
-  return { pricePerPerson: pp, total: pp * passengers, isHikeZone: inHike, isNight: night };
+  const stopCount = stops.length;
+  const total = pp * passengers * stopCount;
+  return { pricePerPerson: pp, total, isHikeZone: inHike, isNight: night, stopCount };
 }
 
 // ===== Account management =====
@@ -271,7 +281,14 @@ function updatePriceDisplay(){
   const paxLabel = document.getElementById('pricePaxLabel');
   const zoneBadge = document.getElementById('priceZoneBadge');
   const totalDisplay = document.getElementById('priceTotalDisplay');
-  if (paxLabel) paxLabel.textContent = `${selectedPassengers} × R${priceInfo.pricePerPerson}`;
+  // Breakdown: "{stops} points × {pax} pax × R{rate}"
+  let label = '';
+  if (priceInfo.stopCount > 0) {
+    label = `${priceInfo.stopCount} point${priceInfo.stopCount !== 1 ? 's' : ''} × ${selectedPassengers} pax × R${priceInfo.pricePerPerson}`;
+  } else {
+    label = `${selectedPassengers} pax × R${priceInfo.pricePerPerson}`;
+  }
+  if (paxLabel) paxLabel.textContent = label;
   if (zoneBadge) zoneBadge.style.display = priceInfo.isHikeZone ? '' : 'none';
   if (totalDisplay) totalDisplay.textContent = `R${priceInfo.total}`;
 }
@@ -382,6 +399,43 @@ function initBookingUI(){
   // Step 1: Continue → Step 2
   if (continueBtn) continueBtn.addEventListener('click', () => {
     showBookingStep(2);
+  });
+
+  // Step 1: Remove last stop
+  const removeLastStopBtn = document.getElementById('removeLastStopBtn');
+  if (removeLastStopBtn) removeLastStopBtn.addEventListener('click', async () => {
+    if (stops.length <= 1) {
+      // Only one stop — same as clear all
+      if (map) clearRoute(map);
+      stops = [];
+      currentRouteGeometry = null;
+      totalDistanceM = 0;
+      totalDurationS = 0;
+      addingStop = false;
+      hideRidePanel();
+      setStatus('Route cleared. Tap the map to choose a destination.');
+      return;
+    }
+    stops.pop();
+    setStatus('Recalculating route…');
+    try {
+      const { routeBetween, routeMultiStop } = await import('./map.js');
+      let result;
+      if (stops.length === 1) {
+        result = await routeBetween(map, lastKnownLatLng, stops[0]);
+      } else {
+        result = await routeMultiStop(map, lastKnownLatLng, stops);
+      }
+      currentRouteGeometry = result.geometry || null;
+      totalDistanceM = result.distance;
+      totalDurationS = result.duration;
+      const km = (result.distance / 1000).toFixed(2);
+      const mins = Math.round(result.duration / 60);
+      showRidePanel(km, mins);
+      setStatus(`Route: ${km} km · ~${mins} min`);
+    } catch (err) {
+      setStatus('Route update failed.');
+    }
   });
 
   // Step 1: Clear
@@ -557,15 +611,73 @@ function estimateMinutesFromMeters(m){
   return Math.max(1, Math.round(m / metersPerMin));
 }
 
-function ensureRideStatusEl(){
-  let el = document.getElementById('rideStatus');
-  const panel = document.getElementById('ridePanel');
-  if (!panel) return null;
-  if (!el){
-    el = document.createElement('div'); el.id = 'rideStatus'; el.style.marginTop = '12px'; el.style.fontSize = '0.85rem'; el.style.fontWeight = '600'; el.style.color = '#06c167'; el.style.textAlign = 'center';
-    panel.appendChild(el);
+// ===== Ride overlay state machine =====
+function showRideOverlay(message){
+  const overlay = document.getElementById('rideOverlay');
+  const msgEl = document.getElementById('rideOverlayMsg');
+  const receipt = document.getElementById('rideReceipt');
+  const doneBtn = document.getElementById('rideDoneBtn');
+  if (overlay) overlay.style.display = 'flex';
+  if (msgEl) msgEl.textContent = message;
+  // Hide receipt and done button by default
+  if (receipt) receipt.classList.add('hidden');
+  if (doneBtn) doneBtn.classList.add('hidden');
+}
+
+function showThankYouScreen(rideData){
+  const overlay = document.getElementById('rideOverlay');
+  const msgEl = document.getElementById('rideOverlayMsg');
+  const receipt = document.getElementById('rideReceipt');
+  const doneBtn = document.getElementById('rideDoneBtn');
+  if (overlay) overlay.style.display = 'flex';
+  if (msgEl) msgEl.textContent = 'THANK YOU FOR USING US';
+  // Populate receipt
+  if (receipt && rideData) {
+    const rateEl = document.getElementById('receiptRate');
+    const paxEl = document.getElementById('receiptPax');
+    const stopsEl = document.getElementById('receiptStops');
+    const hikeRow = document.getElementById('receiptHikeRow');
+    const totalEl = document.getElementById('receiptTotal');
+    if (rateEl) rateEl.textContent = `R${rideData.pricePerPerson || 0}`;
+    if (paxEl) paxEl.textContent = `${rideData.passengers || 1}`;
+    if (stopsEl) stopsEl.textContent = `${(rideData.stops && rideData.stops.length) || 1}`;
+    if (hikeRow) hikeRow.classList.toggle('hidden', !rideData.isHikeZone);
+    if (totalEl) totalEl.textContent = `R${rideData.totalPrice || 0}`;
+    receipt.classList.remove('hidden');
   }
-  return el;
+  if (doneBtn) doneBtn.classList.remove('hidden');
+}
+
+function hideRideOverlay(){
+  const overlay = document.getElementById('rideOverlay');
+  if (overlay) overlay.style.display = 'none';
+}
+
+function resetBookingState(){
+  if (map) clearRoute(map);
+  stops = [];
+  currentRouteGeometry = null;
+  totalDistanceM = 0;
+  totalDurationS = 0;
+  selectedPassengers = 1;
+  addingStop = false;
+  acceptedSoundPlayed = false;
+  lastRideData = null;
+  myRequestId = null;
+  try{ localStorage.removeItem('myRequestId'); }catch(e){}
+  hideRidePanel();
+  hideRideOverlay();
+  // Reset book button
+  const bookRideBtn = document.getElementById('bookRideBtn');
+  if (bookRideBtn) {
+    bookRideBtn.disabled = false;
+    const sp = bookRideBtn.querySelector('span');
+    if (sp) sp.textContent = 'Book Ride';
+  }
+  // Show map hint
+  const hint = document.getElementById('mapHint');
+  if (hint) { hint.textContent = 'Tap the map to set your destination'; hint.classList.remove('hidden'); }
+  setStatus('');
 }
 
 function attachRequestListener(requestId){
@@ -573,55 +685,59 @@ function attachRequestListener(requestId){
   const rRef = ref(database, 'ride_requests/' + requestId);
   // detach previous
   try{ if (myRequestUnsub) myRequestUnsub(); }catch(e){}
-  myRequestUnsub = onValue(rRef, async (snap) => {
+  try{ if (myDriverUnsub) myDriverUnsub(); myDriverUnsub = null; }catch(e){}
+
+  // Show initial waiting overlay
+  showRideOverlay('WAITING FOR A DRIVER');
+
+  myRequestUnsub = onValue(rRef, (snap) => {
     const data = snap.val();
-    const statusEl = ensureRideStatusEl();
     if (!data) {
-      // request removed (likely completed by driver) — clear UI immediately
+      // Request removed (driver completed the ride)
       try{ localStorage.removeItem('myRequestId'); }catch(e){}
-      try{ if (myDriverUnsub) myDriverUnsub(); }catch(e){}
-      // remove status element if present
-      const rs = document.getElementById('rideStatus'); if (rs) rs.remove();
+      showThankYouScreen(lastRideData);
       hideRidePanel();
-      showToast('Ride completed');
       return;
     }
+    // Always capture latest ride data for receipt
+    lastRideData = data;
     if (data.status === 'completed'){
       try{ localStorage.removeItem('myRequestId'); }catch(e){}
-      try{ if (myDriverUnsub) myDriverUnsub(); }catch(e){}
-      const rs = document.getElementById('rideStatus'); if (rs) rs.remove();
+      showThankYouScreen(lastRideData);
       hideRidePanel();
-      showToast('Ride completed');
+      return;
+    }
+    if (data.status === 'picked_up'){
+      showRideOverlay('YOUR RIDE IS IN PROGRESS');
+      hideRidePanel();
       return;
     }
     if (data.acceptedBy) {
-      // show driver ETA — fetch driver location and subscribe to updates
-      const driverId = data.acceptedBy;
-      if (statusEl) statusEl.textContent = 'Driver assigned — calculating ETA…';
-      // detach previous driver listener
-      try{ if (myDriverUnsub) myDriverUnsub(); }catch(e){}
-      const dRef = ref(database, 'drivers/' + driverId);
-      myDriverUnsub = onValue(dRef, (dSnap) => {
-        const dv = dSnap.val() || {};
-        const driverPos = (typeof dv.lat === 'number' && typeof dv.lng === 'number') ? { lat: dv.lat, lng: dv.lng } : null;
-        // prefer pickup origin if available
-        const origin = data.origin ? { lat: data.origin.lat, lng: data.origin.lng } : (data.lat ? { lat: data.lat, lng: data.lng } : null);
-        if (driverPos && origin) {
-          const meters = distanceMeters(driverPos, origin);
-          const mins = estimateMinutesFromMeters(meters);
-          if (statusEl) statusEl.textContent = `Driver is on the way — ETA ~${mins} min`;
-        } else if (statusEl) {
-          statusEl.textContent = 'Driver is on the way';
-        }
-      });
-    } else {
-      if (statusEl) statusEl.textContent = 'Waiting for a driver to accept your request';
+      // Driver accepted — play accepted sound once
+      if (!acceptedSoundPlayed) {
+        acceptedSoundPlayed = true;
+        acceptedSound.play().catch(()=>{});
+      }
+      showRideOverlay('DRIVER ON THE WAY TO YOU');
+      hideRidePanel();
+      return;
     }
+    // No driver yet — waiting
+    showRideOverlay('WAITING FOR A DRIVER');
   });
 }
 
+// Wire "Done" button on ride overlay
+document.addEventListener('DOMContentLoaded', () => {
+  const doneBtn = document.getElementById('rideDoneBtn');
+  if (doneBtn) doneBtn.addEventListener('click', resetBookingState);
+});
+
 // attach listener on load if we have an outstanding request
-try{ const saved = localStorage.getItem('myRequestId'); if (saved) { myRequestId = saved; attachRequestListener(saved); } }catch(e){}
+try{
+  const saved = localStorage.getItem('myRequestId');
+  if (saved) { myRequestId = saved; attachRequestListener(saved); }
+}catch(e){}
 
 function hideRidePanel() {
   const panel = document.getElementById('ridePanel');
@@ -644,3 +760,89 @@ function showMapUI() {
 function setStatus(msg) {
   if (statusEl) statusEl.textContent = msg;
 }
+
+// ===== Route Bookmarks (localStorage) =====
+function getSavedRoutes(){
+  try{
+    const raw = localStorage.getItem('savedRoutes');
+    return raw ? JSON.parse(raw) : [];
+  }catch(e){ return []; }
+}
+function persistRoutes(routes){
+  try{ localStorage.setItem('savedRoutes', JSON.stringify(routes)); }catch(e){}
+}
+function renderSavedRoutes(){
+  const list = document.getElementById('savedRoutesList');
+  const empty = document.getElementById('savedRoutesEmpty');
+  if (!list) return;
+  const routes = getSavedRoutes();
+  list.innerHTML = '';
+  if (!routes.length){ if (empty) empty.classList.remove('hidden'); return; }
+  if (empty) empty.classList.add('hidden');
+  routes.forEach((r, i) => {
+    const card = document.createElement('div');
+    card.className = 'saved-route-card';
+    card.innerHTML = `<div class="saved-route-info"><div class="saved-route-name">${r.name}</div><div class="saved-route-meta">${r.stops.length} stop${r.stops.length !== 1 ? 's' : ''}</div></div><button class="saved-route-delete" data-idx="${i}">✕</button>`;
+    card.querySelector('.saved-route-info').addEventListener('click', () => loadSavedRoute(r));
+    card.querySelector('.saved-route-delete').addEventListener('click', (ev) => { ev.stopPropagation(); deleteSavedRoute(i); });
+    list.appendChild(card);
+  });
+}
+function deleteSavedRoute(idx){
+  const routes = getSavedRoutes();
+  routes.splice(idx, 1);
+  persistRoutes(routes);
+  renderSavedRoutes();
+  showToast('Route deleted');
+}
+async function loadSavedRoute(route){
+  // Close modal
+  const modal = document.getElementById('savedRoutesModal');
+  if (modal) modal.classList.add('hidden');
+  if (!lastKnownLatLng){ showToast('Get your location first'); return; }
+  stops = route.stops.map(s => ({lat: s.lat, lng: s.lng}));
+  setStatus('Loading saved route…');
+  try{
+    const { routeBetween, routeMultiStop } = await import('./map.js');
+    let result;
+    if (stops.length === 1){
+      result = await routeBetween(map, lastKnownLatLng, stops[0]);
+    } else {
+      result = await routeMultiStop(map, lastKnownLatLng, stops);
+    }
+    currentRouteGeometry = result.geometry || null;
+    totalDistanceM = result.distance;
+    totalDurationS = result.duration;
+    const km = (result.distance / 1000).toFixed(2);
+    const mins = Math.round(result.duration / 60);
+    showRidePanel(km, mins);
+    setStatus(`Route: ${km} km · ~${mins} min`);
+  }catch(err){
+    setStatus('Failed to load route.');
+  }
+}
+
+// Wire bookmark buttons
+document.addEventListener('DOMContentLoaded', () => {
+  const savedRoutesBtn = document.getElementById('savedRoutesBtn');
+  const closeSavedRoutesBtn = document.getElementById('closeSavedRoutesBtn');
+  const saveRouteBtn = document.getElementById('saveRouteBtn');
+  const savedRoutesModal = document.getElementById('savedRoutesModal');
+
+  if (savedRoutesBtn) savedRoutesBtn.addEventListener('click', () => {
+    renderSavedRoutes();
+    if (savedRoutesModal) savedRoutesModal.classList.remove('hidden');
+  });
+  if (closeSavedRoutesBtn) closeSavedRoutesBtn.addEventListener('click', () => {
+    if (savedRoutesModal) savedRoutesModal.classList.add('hidden');
+  });
+  if (saveRouteBtn) saveRouteBtn.addEventListener('click', () => {
+    if (!stops.length){ showToast('No route to save'); return; }
+    const name = prompt('Name this route:');
+    if (!name || !name.trim()) return;
+    const routes = getSavedRoutes();
+    routes.push({ name: name.trim(), stops: stops.map(s => ({lat:s.lat, lng:s.lng})) });
+    persistRoutes(routes);
+    showToast('Route saved');
+  });
+});

@@ -789,6 +789,215 @@ body {
 .hidden { display: none !important; }
 
 /* =============================================
+   RIDE STATUS OVERLAY (locked fullscreen during ride lifecycle)
+   ============================================= */
+.ride-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 9999;
+  background: rgba(0,0,0,0.92);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: all;
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+}
+.ride-overlay-content {
+  text-align: center;
+  padding: 40px 32px;
+  max-width: 400px;
+}
+.ride-overlay-icon {
+  font-size: 3rem;
+  margin-bottom: 24px;
+  animation: ride-pulse 2s ease-in-out infinite;
+}
+.ride-overlay-msg {
+  font-family: var(--font);
+  font-size: 1.5rem;
+  font-weight: 800;
+  color: #ffffff;
+  line-height: 1.4;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+}
+@keyframes ride-pulse {
+  0%, 100% { transform: scale(1); opacity: 1; }
+  50% { transform: scale(1.1); opacity: 0.7; }
+}
+
+/* =============================================
+   RIDE RECEIPT (shown on ride complete)
+   ============================================= */
+.ride-receipt {
+  margin-top: 24px;
+  text-align: left;
+  width: 100%;
+  max-width: 300px;
+  margin-left: auto;
+  margin-right: auto;
+}
+.receipt-divider {
+  height: 1px;
+  background: rgba(255,255,255,0.15);
+  margin: 12px 0;
+}
+.receipt-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 6px 0;
+  font-size: 0.88rem;
+  color: var(--text-2);
+}
+.receipt-row span:first-child { font-weight: 500; }
+.receipt-row span:last-child { font-weight: 700; color: var(--text); }
+.receipt-hike-badge {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: var(--pill);
+  background: rgba(230,126,34,0.15);
+  color: #e67e22;
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+}
+.receipt-total-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 0;
+  font-size: 1.2rem;
+  font-weight: 900;
+  color: var(--text);
+}
+.receipt-total-row span:last-child { color: var(--green); font-size: 1.4rem; }
+
+.ride-done-btn {
+  margin-top: 28px;
+  width: 100%;
+  max-width: 300px;
+  padding: 16px;
+  border-radius: var(--radius-sm);
+  border: none;
+  background: var(--green);
+  color: #fff;
+  font-family: var(--font);
+  font-size: 1rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background 0.15s, transform 0.1s;
+}
+.ride-done-btn:active { transform: scale(0.97); background: var(--green-dark); }
+
+/* =============================================
+   REMOVE LAST STOP BUTTON
+   ============================================= */
+.ride-removestop-btn {
+  flex: 1;
+  padding: 14px;
+  border-radius: var(--radius-sm);
+  border: 1px solid rgba(225,25,0,0.25);
+  background: rgba(225,25,0,0.08);
+  color: var(--red);
+  font-family: var(--font);
+  font-size: 0.9rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.ride-removestop-btn:active { background: rgba(225,25,0,0.15); }
+
+/* =============================================
+   SAVE ROUTE BUTTON
+   ============================================= */
+.ride-save-btn {
+  width: 52px;
+  height: 52px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  background: var(--surface-2);
+  color: var(--text-muted);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+  flex-shrink: 0;
+}
+.ride-save-btn:active { background: var(--surface-3); color: var(--green); }
+
+/* =============================================
+   SAVED ROUTES MODAL
+   ============================================= */
+.saved-routes-sheet { max-height: 80vh; overflow-y: auto; }
+.saved-routes-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 8px;
+}
+.saved-route-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 16px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  background: var(--surface-2);
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.saved-route-card:active { background: var(--surface-3); }
+.saved-route-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex: 1;
+  min-width: 0;
+}
+.saved-route-name {
+  font-weight: 700;
+  font-size: 0.95rem;
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.saved-route-meta {
+  font-size: 0.78rem;
+  color: var(--text-muted);
+}
+.saved-route-delete {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  border: none;
+  background: rgba(225,25,0,0.1);
+  color: var(--red);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  font-size: 1.1rem;
+  flex-shrink: 0;
+  margin-left: 10px;
+  transition: background 0.15s;
+}
+.saved-route-delete:active { background: rgba(225,25,0,0.2); }
+.saved-routes-empty {
+  text-align: center;
+  font-size: 0.85rem;
+  color: var(--text-muted);
+  padding: 24px 16px;
+  line-height: 1.5;
+}
+
+/* =============================================
    DESKTOP
    ============================================= */
 @media (min-width: 768px) {

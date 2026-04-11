@@ -29,12 +29,20 @@ document.addEventListener('DOMContentLoaded', ()=>{
       const d = val[k];
       const el = document.createElement('div');
       el.className = 'driver-card';
-      const online = d.online ? '<strong style="color:#06c167">Online</strong>' : '<span style="color:#636366">Offline</span>';
+      let online;
+      if (d.online && d.active) {
+        online = '<strong style="color:#06c167">Online · Active</strong>';
+      } else if (d.online && !d.active) {
+        online = '<strong style="color:#f5a623">Online · Inactive</strong>';
+      } else {
+        online = '<span style="color:#636366">Offline</span>';
+      }
       const loc = (d.lat && d.lng) ? `${d.lat.toFixed(5)}, ${d.lng.toFixed(5)}` : 'no location';
       const hasLoc = typeof d.lat === 'number' && typeof d.lng === 'number';
       el.innerHTML = `<div class="driver-info"><strong>${escapeHtml(d.name||'Unnamed')}</strong><div class="driver-meta">${online} · ${loc}</div></div>
         <div class="driver-actions">
           ${hasLoc ? `<button data-id="${escapeHtml(k)}" data-name="${escapeHtml(d.name||'Unnamed')}" data-lat="${d.lat}" data-lng="${d.lng}" class="locate">Locate</button>` : ''}
+          ${hasLoc ? `<button data-id="${escapeHtml(k)}" data-name="${escapeHtml(d.name||'Unnamed')}" class="track">Track</button>` : ''}
           <button data-id="${escapeHtml(k)}" class="remove">Remove</button>
         </div>`;
       list.appendChild(el);
@@ -42,6 +50,10 @@ document.addEventListener('DOMContentLoaded', ()=>{
     list.querySelectorAll('.locate').forEach(btn => btn.addEventListener('click', (e)=>{
       const b = e.target;
       showDriverLocation(b.getAttribute('data-name'), parseFloat(b.getAttribute('data-lat')), parseFloat(b.getAttribute('data-lng')));
+    }));
+    list.querySelectorAll('.track').forEach(btn => btn.addEventListener('click', (e)=>{
+      const b = e.target;
+      startLiveTracking(b.getAttribute('data-id'), b.getAttribute('data-name'));
     }));
     list.querySelectorAll('.remove').forEach(btn => btn.addEventListener('click', async (e)=>{
       const id = e.target.getAttribute('data-id');
@@ -338,6 +350,7 @@ document.addEventListener('DOMContentLoaded', ()=>{
   const priceHikeDayEl = document.getElementById('priceHikeDay');
   const priceHikeNightEl = document.getElementById('priceHikeNight');
   const priceNightHourEl = document.getElementById('priceNightHour');
+  const priceNightEndHourEl = document.getElementById('priceNightEndHour');
   const priceSaveBtn = document.getElementById('priceSaveBtn');
   const priceResetBtn = document.getElementById('priceResetBtn');
   const priceMsg = document.getElementById('priceMsg');
@@ -357,6 +370,7 @@ document.addEventListener('DOMContentLoaded', ()=>{
     if (typeof data.hikeDay === 'number') priceHikeDayEl.value = data.hikeDay;
     if (typeof data.hikeNight === 'number') priceHikeNightEl.value = data.hikeNight;
     if (typeof data.nightStartHour === 'number') priceNightHourEl.value = data.nightStartHour;
+    if (typeof data.nightEndHour === 'number') priceNightEndHourEl.value = data.nightEndHour;
   }
 
   // Live listener — syncs across admins
@@ -371,10 +385,11 @@ document.addEventListener('DOMContentLoaded', ()=>{
     const hikeDay = Math.max(1, Math.min(999, parseInt(priceHikeDayEl.value,10)||35));
     const hikeNight = Math.max(1, Math.min(999, parseInt(priceHikeNightEl.value,10)||50));
     const nightStartHour = Math.max(0, Math.min(23, parseInt(priceNightHourEl.value,10)||22));
+    const nightEndHour = Math.max(0, Math.min(23, parseInt(priceNightEndHourEl.value,10)||8));
     priceSaveBtn.disabled = true;
     priceSaveBtn.textContent = 'Saving…';
     try {
-      await db.ref('settings/pricing').set({ normalDay, normalNight, hikeDay, hikeNight, nightStartHour, updatedAt: Date.now() });
+      await db.ref('settings/pricing').set({ normalDay, normalNight, hikeDay, hikeNight, nightStartHour, nightEndHour, updatedAt: Date.now() });
       showPriceMsg('Pricing saved', 'success');
     } catch(e){
       console.error(e);
@@ -531,4 +546,96 @@ document.addEventListener('DOMContentLoaded', ()=>{
   db.ref('settings/hikeZones').on('value', renderHikeZones);
 
   setTimeout(initHikeMap, 200);
+
+  // ===== PANIC ALERTS =====
+  const panicAlertsList = document.getElementById('panicAlertsList');
+
+  function renderPanicAlerts(snapshot){
+    const val = snapshot.val() || {};
+    const keys = Object.keys(val).sort((a,b) => (val[b].timestamp||0) - (val[a].timestamp||0));
+    panicAlertsList.innerHTML = '';
+    if (!keys.length) {
+      panicAlertsList.innerHTML = '<div class="panic-empty">No panic alerts</div>';
+      return;
+    }
+    keys.forEach(k => {
+      const a = val[k];
+      const card = document.createElement('div');
+      card.className = 'panic-card';
+      const when = a.timestamp ? new Date(a.timestamp).toLocaleString() : 'Unknown time';
+      const loc = (typeof a.lat === 'number' && typeof a.lng === 'number') ? `${a.lat.toFixed(5)}, ${a.lng.toFixed(5)}` : 'Location unknown';
+      card.innerHTML = `<div class="panic-info"><div class="panic-driver">⚠ ${escapeHtml(a.driverName || 'Unknown driver')}</div><div class="panic-meta">${when} · ${loc}</div></div>`;
+      const dismissBtn = document.createElement('button');
+      dismissBtn.className = 'panic-dismiss';
+      dismissBtn.textContent = 'Dismiss';
+      dismissBtn.addEventListener('click', async () => {
+        try { await db.ref('panic_alerts/' + k).remove(); } catch(e){ console.error(e); }
+      });
+      card.appendChild(dismissBtn);
+      panicAlertsList.appendChild(card);
+    });
+  }
+
+  db.ref('panic_alerts').on('value', renderPanicAlerts);
+
+  // ===== LIVE TRACKING =====
+  const liveTrackOverlay = document.getElementById('liveTrackOverlay');
+  const liveTrackCloseBtn = document.getElementById('liveTrackClose');
+  const liveTrackNameEl = document.getElementById('liveTrackName');
+  const liveTrackMapEl = document.getElementById('liveTrackMap');
+  const liveTrackInfoEl = document.getElementById('liveTrackInfo');
+  let liveTrackMap = null;
+  let liveTrackMarker = null;
+  let liveTrackUnsub = null; // function to detach listener
+
+  function startLiveTracking(driverId, driverName){
+    // Stop any previous tracking
+    stopLiveTracking();
+    liveTrackNameEl.textContent = 'Tracking: ' + (driverName || 'Driver');
+    liveTrackOverlay.classList.remove('hidden');
+
+    if (!liveTrackMap) {
+      liveTrackMap = L.map(liveTrackMapEl, { zoomControl: true }).setView([-26.2041, 28.0473], 13);
+      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19, attribution: '' }).addTo(liveTrackMap);
+      if (liveTrackMap.attributionControl) liveTrackMap.attributionControl.setPrefix('');
+    }
+    setTimeout(()=>{ try{ liveTrackMap.invalidateSize(); }catch(e){} }, 150);
+
+    // Listen to driver's location in real time
+    const driverRef = db.ref('drivers/' + driverId);
+    const cb = driverRef.on('value', (snap) => {
+      const d = snap.val();
+      if (!d || typeof d.lat !== 'number' || typeof d.lng !== 'number') {
+        liveTrackInfoEl.textContent = 'Waiting for driver location…';
+        return;
+      }
+      const onlineText = d.online ? (d.active ? 'Online · Active' : 'Online · Inactive') : 'Offline';
+      liveTrackInfoEl.textContent = `📍 ${d.lat.toFixed(5)}, ${d.lng.toFixed(5)} · ${onlineText}`;
+      if (liveTrackMarker) {
+        liveTrackMarker.setLatLng([d.lat, d.lng]);
+      } else {
+        liveTrackMarker = L.marker([d.lat, d.lng]).addTo(liveTrackMap);
+        liveTrackMarker.bindPopup(`<strong>${escapeHtml(driverName || 'Driver')}</strong>`).openPopup();
+      }
+      liveTrackMap.setView([d.lat, d.lng], Math.max(liveTrackMap.getZoom(), 15));
+    });
+
+    liveTrackUnsub = () => { driverRef.off('value', cb); };
+  }
+
+  function stopLiveTracking(){
+    if (liveTrackUnsub) { liveTrackUnsub(); liveTrackUnsub = null; }
+    if (liveTrackMarker && liveTrackMap) { try{ liveTrackMap.removeLayer(liveTrackMarker); }catch(e){} liveTrackMarker = null; }
+  }
+
+  liveTrackCloseBtn.addEventListener('click', ()=>{
+    stopLiveTracking();
+    liveTrackOverlay.classList.add('hidden');
+  });
+  liveTrackOverlay.addEventListener('click', (e)=>{
+    if (e.target === liveTrackOverlay) {
+      stopLiveTracking();
+      liveTrackOverlay.classList.add('hidden');
+    }
+  });
 });

@@ -636,6 +636,184 @@ body {
 .requests-list:not(:empty) + .empty-state { display: none; }
 
 /* =============================================
+   NAVIGATION BANNER (Garmin-style turn instructions)
+   ============================================= */
+.nav-banner {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 620;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 20px;
+  background: rgba(0,0,0,0.85);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  border-bottom: 1px solid var(--border-light);
+  color: var(--text);
+  font-family: var(--font);
+}
+.nav-banner-icon {
+  width: 40px;
+  height: 40px;
+  border-radius: 10px;
+  background: var(--green);
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.3rem;
+  font-weight: 800;
+  flex-shrink: 0;
+}
+.nav-banner-text {
+  flex: 1;
+  font-size: 0.92rem;
+  font-weight: 600;
+  line-height: 1.3;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.nav-banner-dist {
+  font-size: 0.82rem;
+  font-weight: 700;
+  color: var(--green);
+  flex-shrink: 0;
+}
+
+/* =============================================
+   RIDE ACTION BAR (Picked Up / Next Stop / Trip Done)
+   ============================================= */
+.ride-action-bar {
+  position: absolute;
+  bottom: calc(80px + var(--safe-bottom));
+  left: 16px;
+  right: 16px;
+  display: flex;
+  gap: 10px;
+  z-index: 620;
+}
+.ride-action-btn {
+  flex: 1;
+  padding: 16px 0;
+  border-radius: var(--pill);
+  border: none;
+  font-family: var(--font);
+  font-size: 0.95rem;
+  font-weight: 700;
+  cursor: pointer;
+  box-shadow: 0 4px 20px rgba(0,0,0,0.5);
+  transition: transform 0.12s var(--ease), opacity 0.12s;
+  text-align: center;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+.ride-action-btn:active { transform: scale(0.96); opacity: 0.9; }
+.ride-action-btn--pickup { background: var(--green); color: #fff; }
+.ride-action-btn--next { background: var(--accent); color: #fff; }
+.ride-action-btn--done { background: var(--red); color: #fff; }
+.ride-action-btn--addstop { background: var(--orange); color: #fff; }
+
+/* =============================================
+   TRIP SUMMARY MODAL
+   ============================================= */
+.trip-summary-sheet {
+  background: var(--surface);
+  border-radius: var(--radius) var(--radius) 0 0;
+  padding: 24px 20px 32px;
+  width: 100%;
+  max-width: 420px;
+  margin: auto auto 0;
+  animation: sheet-up 0.35s var(--spring);
+}
+@keyframes sheet-up { from { transform: translateY(100%); } to { transform: translateY(0); } }
+.trip-summary-title {
+  font-size: 1.15rem;
+  font-weight: 700;
+  text-align: center;
+  margin-bottom: 20px;
+}
+.trip-summary-body { display: flex; flex-direction: column; gap: 12px; }
+.trip-row {
+  display: flex; justify-content: space-between; align-items: center;
+  font-size: 0.88rem; color: var(--text-2);
+}
+.trip-row span:last-child { font-weight: 600; color: var(--text); }
+.trip-divider { height: 1px; background: var(--border-light); margin: 4px 0; }
+.trip-total span:last-child { font-size: 1.2rem; color: var(--green); font-weight: 800; }
+.trip-done-btn {
+  margin-top: 20px; width: 100%;
+  padding: 16px; border: none; border-radius: var(--pill);
+  background: var(--green); color: #fff; font-family: var(--font);
+  font-size: 1rem; font-weight: 700; cursor: pointer;
+  text-transform: uppercase; letter-spacing: 0.5px;
+}
+.trip-hike-row span:last-child { color: #e67e22; }
+
+/* =============================================
+   PANIC BUTTON
+   ============================================= */
+.panic-btn {
+  position: absolute;
+  top: 60px; right: 16px;
+  width: 44px; height: 44px;
+  border-radius: 50%;
+  border: 2px solid var(--red);
+  background: rgba(225,25,0,0.15);
+  color: var(--red);
+  display: flex; align-items: center; justify-content: center;
+  cursor: pointer; z-index: 630;
+  transition: background 0.3s, transform 0.3s;
+}
+.panic-btn.pressing {
+  background: var(--red);
+  color: #fff;
+  transform: scale(1.15);
+}
+.panic-btn.sent {
+  background: var(--red);
+  color: #fff;
+  pointer-events: none;
+}
+
+/* =============================================
+   ZOOM CONTROL FIX (avoid overlap with controls)
+   ============================================= */
+.map-modal-map .leaflet-control-zoom {
+  position: absolute !important;
+  top: 70px !important;
+  right: 10px !important;
+  left: auto !important;
+}
+
+/* =============================================
+   GARMIN DIRECTIONAL ARROW
+   ============================================= */
+.driver-arrow-icon {
+  width: 32px; height: 32px;
+  transition: transform 0.3s ease;
+}
+.driver-arrow-icon svg {
+  width: 32px; height: 32px;
+}
+
+/* =============================================
+   ROAD SNAP TOGGLE BUTTON
+   ============================================= */
+.bottombar-btn--snap { color: var(--text-muted); }
+.bottombar-btn--snap.active { color: var(--green); }
+.bottombar-btn--snap.active svg { stroke: var(--green); }
+
+/* Map close button disabled state during active ride */
+.map-close-btn.disabled {
+  opacity: 0.2;
+  pointer-events: none;
+}
+
+/* =============================================
    PASSENGER & STOPS INFO
    ============================================= */
 .pax-badge {

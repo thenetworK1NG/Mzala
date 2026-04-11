@@ -68,6 +68,10 @@
       <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 11-2.64-6.36"/><polyline points="21 3 21 9 15 9"/></svg>
       <span>Refresh</span>
     </button>
+    <button id="roadSnapBtn" class="bottombar-btn bottombar-btn--snap" title="Toggle road snap">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l5.553 2.776A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7"/></svg>
+      <span>Road Snap</span>
+    </button>
     <button id="stopShiftBtn" class="bottombar-btn bottombar-btn--stop">
       <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="6" width="12" height="12" rx="2"/></svg>
       <span>Go Offline</span>
@@ -106,15 +110,63 @@
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
         </button>
       </div>
+      <!-- Navigation instruction banner (Garmin-style) -->
+      <div id="navBanner" class="nav-banner" style="display:none">
+        <div class="nav-banner-icon" id="navBannerIcon">↑</div>
+        <div class="nav-banner-text" id="navBannerText">Calculating route…</div>
+        <div class="nav-banner-dist" id="navBannerDist"></div>
+      </div>
       <div id="mapPopup" class="map-modal-map"></div>
       <div class="map-modal-controls">
         <button id="toggleDriverPathBtn" class="pill-btn">Driver route</button>
         <button id="togglePassengerRouteBtn" class="pill-btn">Passenger route</button>
       </div>
+      <!-- Ride action buttons (shown during active ride) -->
+      <div id="rideActions" class="ride-action-bar" style="display:none">
+        <button id="pickedUpBtn" class="ride-action-btn ride-action-btn--pickup" style="display:none">Picked Up</button>
+        <button id="addStopMidBtn" class="ride-action-btn ride-action-btn--addstop" style="display:none">Add Stop</button>
+        <button id="nextStopBtn" class="ride-action-btn ride-action-btn--next" style="display:none">Next Stop</button>
+        <button id="tripDoneBtn" class="ride-action-btn ride-action-btn--done" style="display:none">Trip Done</button>
+      </div>
+      <!-- Panic button (long-press 3s) -->
+      <button id="panicBtn" class="panic-btn" style="display:none" title="Hold 3 seconds to send panic alert">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+      </button>
+    </div>
+  </div>
+
+  <!-- ===== TRIP SUMMARY MODAL ===== -->
+  <div id="tripSummaryModal" class="modal-overlay" style="display:none">
+    <div class="trip-summary-sheet">
+      <div class="modal-handle"></div>
+      <h2 class="trip-summary-title">Trip Summary</h2>
+      <div class="trip-summary-body">
+        <div class="trip-row"><span>Rider</span><span id="tripRider">—</span></div>
+        <div class="trip-row"><span>Passengers</span><span id="tripPax">—</span></div>
+        <div class="trip-row"><span>Stops</span><span id="tripStops">—</span></div>
+        <div class="trip-row trip-hike-row hidden" id="tripHikeRow"><span>Hike zone</span><span>Yes</span></div>
+        <div class="trip-divider"></div>
+        <div class="trip-row trip-total"><span>Total</span><span id="tripTotal">—</span></div>
+      </div>
+      <button id="tripSummaryDoneBtn" class="btn-solid trip-done-btn">Done</button>
     </div>
   </div>
 
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <script type="module" src="js/driver.js"></script>
+  <script>
+  (function(){
+    try { if (sessionStorage.getItem('mzala_fs') !== '1') return; } catch(e){ return; }
+    function goFS(){
+      var el = document.documentElement;
+      var fn = el.requestFullscreen || el.webkitRequestFullscreen || el.msRequestFullscreen;
+      if (fn) try { fn.call(el); } catch(e){}
+      document.removeEventListener('click', goFS, true);
+      document.removeEventListener('touchstart', goFS, true);
+    }
+    document.addEventListener('click', goFS, true);
+    document.addEventListener('touchstart', goFS, true);
+  })();
+  </script>
 </body>
 </html>
