@@ -694,6 +694,7 @@ body {
   right: 16px;
   display: flex;
   gap: 10px;
+  flex-wrap: wrap;
   z-index: 620;
 }
 .ride-action-btn {
@@ -716,6 +717,8 @@ body {
 .ride-action-btn--next { background: var(--accent); color: #fff; }
 .ride-action-btn--done { background: var(--red); color: #fff; }
 .ride-action-btn--addstop { background: var(--orange); color: #fff; }
+.ride-action-btn--addstop.ride-action-btn--cancel { background: var(--surface-3); color: var(--text-muted); }
+.ride-action-btn--removestop { background: var(--surface-2); color: var(--red); border: 1px solid rgba(225,25,0,0.3); font-size: 0.8rem; }
 
 /* =============================================
    TRIP SUMMARY MODAL

@@ -97,14 +97,42 @@ function isTripWithinLimit(origin, destination){
   return dist <= geofence.maxTripKm;
 }
 
-// Check if a point is inside any hike zone
+// Check if a single point is inside any hike zone (tight 1km default radius)
 function isInHikeZone(latLng){
   if (!hikeZones) return false;
   const zones = Object.values(hikeZones);
   for (const z of zones) {
     if (typeof z.lat !== 'number' || typeof z.lng !== 'number') continue;
     const dist = haversineKm(latLng, { lat: z.lat, lng: z.lng });
-    if (dist <= (z.radiusKm || 5)) return true;
+    if (dist <= (z.radiusKm || 1)) return true;
+  }
+  return false;
+}
+
+// Check if the route polyline passes through any hike zone
+// Samples every ~10th point for performance, plus checks all stops
+function doesRouteCrossHikeZone(geometry, stopsArr){
+  if (!hikeZones) return false;
+  // Check all stop points first
+  if (stopsArr && stopsArr.length) {
+    for (const s of stopsArr) {
+      if (isInHikeZone(s)) return true;
+    }
+  }
+  // Check pickup point
+  if (lastKnownLatLng && isInHikeZone(lastKnownLatLng)) return true;
+  // Sample along the route polyline
+  if (geometry && geometry.length) {
+    const step = Math.max(1, Math.floor(geometry.length / 50)); // ~50 samples max
+    for (let i = 0; i < geometry.length; i += step) {
+      const pt = geometry[i];
+      const latLng = Array.isArray(pt) ? { lat: pt[0], lng: pt[1] } : pt;
+      if (isInHikeZone(latLng)) return true;
+    }
+    // Always check the last point
+    const last = geometry[geometry.length - 1];
+    const lastPt = Array.isArray(last) ? { lat: last[0], lng: last[1] } : last;
+    if (isInHikeZone(lastPt)) return true;
   }
   return false;
 }
@@ -121,13 +149,8 @@ function isNightTime(){
 function calculatePrice(passengers){
   const defaults = { normalDay: 20, normalNight: 30, hikeDay: 35, hikeNight: 50 };
   const p = pricing || defaults;
-  // Hike zone applies if pickup OR any stop/destination is inside a hike zone
-  let inHike = lastKnownLatLng ? isInHikeZone(lastKnownLatLng) : false;
-  if (!inHike && stops.length) {
-    for (const s of stops) {
-      if (isInHikeZone(s)) { inHike = true; break; }
-    }
-  }
+  // Hike zone applies if the route polyline crosses any hike zone
+  const inHike = doesRouteCrossHikeZone(currentRouteGeometry, stops);
   const night = isNightTime();
   let pp;
   if (inHike) {
@@ -278,11 +301,14 @@ function showBookingStep(step){
 function updateStopsInfo(){
   const stopsInfo = document.getElementById('stopsInfo');
   const stopsCount = document.getElementById('stopsCount');
+  const removeLink = document.getElementById('removeLastStopBtn');
   if (stops.length > 1 && stopsInfo && stopsCount) {
     stopsCount.textContent = `${stops.length} stops`;
     stopsInfo.classList.remove('hidden');
+    if (removeLink) removeLink.classList.remove('hidden');
   } else if (stopsInfo) {
     stopsInfo.classList.add('hidden');
+    if (removeLink) removeLink.classList.add('hidden');
   }
 }
 
@@ -425,9 +451,28 @@ function initBookingUI(){
   if (addStopBtn) addStopBtn.addEventListener('click', () => {
     addingStop = true;
     hideRidePanel();
-    setStatus('Tap the map to add another stop.');
+    setStatus('');
+    const banner = document.getElementById('addStopBanner');
     const hint = document.getElementById('mapHint');
-    if (hint) { hint.textContent = 'Tap the map to add another stop'; hint.classList.remove('hidden'); }
+    if (hint) hint.classList.add('hidden');
+    if (banner) banner.classList.remove('hidden');
+  });
+
+  // Cancel adding stop
+  const cancelAddStopBtn = document.getElementById('cancelAddStopBtn');
+  if (cancelAddStopBtn) cancelAddStopBtn.addEventListener('click', () => {
+    addingStop = false;
+    const banner = document.getElementById('addStopBanner');
+    if (banner) banner.classList.add('hidden');
+    // Re-show the ride panel if we have stops
+    if (stops.length > 0) {
+      const km = (totalDistanceM / 1000).toFixed(2);
+      const mins = Math.round(totalDurationS / 60);
+      showRidePanel(km, mins);
+      setStatus(`Route: ${km} km`);
+    } else {
+      setStatus('Tap the map to set your destination.');
+    }
   });
 
   // Step 1: Continue → Step 2
@@ -466,7 +511,7 @@ function initBookingUI(){
       const km = (result.distance / 1000).toFixed(2);
       const mins = Math.round(result.duration / 60);
       showRidePanel(km, mins);
-      setStatus(`Route: ${km} km · ~${mins} min`);
+      setStatus(`Route: ${km} km`);
     } catch (err) {
       setStatus('Route update failed.');
     }
@@ -586,6 +631,8 @@ function ensureMapClick() {
     setStatus('Routing…');
     const hint = document.getElementById('mapHint');
     if (hint) hint.classList.add('hidden');
+    const banner = document.getElementById('addStopBanner');
+    if (banner) banner.classList.add('hidden');
 
     try {
       const { routeBetween, routeMultiStop } = await import('./map.js');
@@ -608,7 +655,7 @@ function ensureMapClick() {
       const km = (result.distance / 1000).toFixed(2);
       const mins = Math.round(result.duration / 60);
       showRidePanel(km, mins);
-      setStatus(`Route: ${km} km · ~${mins} min`);
+      setStatus(`Route: ${km} km`);
     } catch (err) {
       // Revert the stop we just added on failure
       stops.pop();
@@ -621,9 +668,7 @@ function ensureMapClick() {
 function showRidePanel(km, mins) {
   const panel = document.getElementById('ridePanel');
   const distEl = document.getElementById('rideDistance');
-  const durEl = document.getElementById('rideDuration');
   if (distEl) distEl.textContent = km;
-  if (durEl) durEl.textContent = mins;
   if (panel) panel.classList.remove('hidden');
   updateStopsInfo();
   showBookingStep(1);
@@ -752,7 +797,9 @@ function attachRequestListener(requestId){
       return;
     }
     if (data.status === 'picked_up'){
-      showRideOverlay('YOUR RIDE IS IN PROGRESS');
+      const stopCount = (data.stops && data.stops.length) || 1;
+      const total = data.totalPrice || 0;
+      showRideOverlay('YOUR RIDE IS IN PROGRESS', `${stopCount} stop${stopCount !== 1 ? 's' : ''} · Total: R${total}`);
       hideRidePanel();
       return;
     }

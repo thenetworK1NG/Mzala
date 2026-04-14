@@ -1,0 +1,90 @@
+================================================================
+  MZALA v0.1 — UPDATE LOG
+  Date: April 9, 2026
+================================================================
+
+1. DRIVER APP — RIDE LIFECYCLE & NAVIGATION MODE
+-------------------------------------------------
+- Accept ride → map auto-opens and LOCKS (driver cannot close map during active ride)
+- "Picked Up" button: Driver confirms passenger pickup (sets status to picked_up)
+- "Next Stop" button: For multi-stop rides, advances navigation to the next waypoint
+- "Trip Done" button: Ends the ride with "Are you sure?" confirmation dialog
+- Driver can ONLY exit the map view after declaring the trip as done
+- Garmin-style navigation: map follows driver position at street level (zoom 16+)
+- Turn-by-turn instructions shown in top banner with direction arrows and distance
+- OSRM route recalculates every 10 seconds or when driver moves >50 meters
+- Smooth marker animation (no jumping between positions)
+
+2. DRIVER APP — MAP MATCHING (ROAD SNAP)
+-----------------------------------------
+- New "Road Snap" toggle button in the bottom bar
+- When ON: GPS position snapped to nearest road via OSRM nearest endpoint
+- When OFF: raw GPS position used (original behavior)
+- Toggle state persisted in sessionStorage (per browser session)
+- Improves visual accuracy of driver position on map
+
+3. DRIVER APP — ACTIVE STATUS BROADCASTING
+-------------------------------------------
+- New "active" field in Firebase drivers/{id} (boolean)
+- Browser Visibility API detects if driver app tab is visible/focused
+- Tab visible → active: true (GPS functional, admin can track)
+- Tab hidden/backgrounded → active: false
+- Set on shift start, shift end, page unload, and onDisconnect fallback
+
+4. ADMIN PANEL — DRIVER STATUS DISPLAY
+---------------------------------------
+- Three-state driver status (was: Online/Offline):
+  - "Online · Active" (green) — shift on, app tab visible, GPS working
+  - "Online · Inactive" (amber) — shift on, but app tab is backgrounded
+  - "Offline" (gray) — not on shift
+- Status updates in real-time via Firebase
+
+5. ADMIN PANEL — PRICING CONFIGURATION
+----------------------------------------
+- New fields added to Pricing card:
+  - "Base fare" (flat fee per trip, default R0)
+  - "Price per stop" (charged per stop, default R5)
+- Both saved to Firebase settings/pricing alongside existing rates
+- Passenger app reads these in real-time
+
+6. PASSENGER APP — STRICT STATE-DRIVEN OVERLAY
+------------------------------------------------
+- Full-screen locked overlay during entire ride lifecycle:
+  - "WAITING FOR A DRIVER" — shown immediately after booking
+  - "DRIVER ON THE WAY TO YOU" — shown when driver accepts
+  - "YOUR RIDE IS IN PROGRESS" — shown when driver presses "Picked Up"
+  - "RIDE COMPLETE, THANK YOU FOR USING US" — shown on completion (auto-dismisses after 5s)
+- Passenger CANNOT interact with any other part of the app during these states
+- No cancel option, no map interaction, no buttons accessible
+- NO ETA shown at any point — only status messages
+
+7. PRICING UPDATE — PER-PERSON PER-POINT
+---------------------------------------
+- New pricing formula:
+  total = rate × passengers × points_booked
+- Rates (all per person per point):
+  Day (normal):       R20 pp/point
+  Night (normal):     R30 pp/point
+  Day (hike zone):    R35 pp/point
+  Night (hike zone):  R50 pp/point
+- Night window: 10pm to 8am (was 10pm to 6am)
+- Night start AND end hour now admin-configurable
+- baseFare and pricePerStop REMOVED (no longer used)
+- Price breakdown shown in booking Step 3:
+  "{n} points × {p} pax × R{rate}"
+- Hike zone pricing triggers if pickup OR any stop is in/around a hike zone
+- Price recalculates dynamically when stops are added
+
+================================================================
+  TECHNICAL NOTES
+================================================================
+- All changes are modular and follow existing project structure
+- Firebase Realtime Database schema additions are additive (no breaking changes)
+- Driver ride_requests/{id} now uses status field: 'accepted' → 'picked_up' → 'completed'
+- OSRM public demo server used for road snapping and turn-by-turn routing
+- Road snap uses OSRM nearest/v1/driving endpoint
+- Navigation uses OSRM route/v1/driving with steps=true for turn instructions
+- ETA code completely removed from passenger app (no driver location tracking)
+- Existing geofence, hike zones, multi-stop routing all preserved
+- settings/pricing schema: baseFare and pricePerStop removed, nightEndHour added
+================================================================

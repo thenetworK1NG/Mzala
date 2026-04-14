@@ -398,6 +398,7 @@ function showRideActionButtons(state){
   const nextStopBtn = document.getElementById('nextStopBtn');
   const tripDoneBtn = document.getElementById('tripDoneBtn');
   const addStopMidBtn = document.getElementById('addStopMidBtn');
+  const removeStopMidBtn = document.getElementById('removeStopMidBtn');
   const panicBtn = document.getElementById('panicBtn');
   if (!rideActions) return;
   rideActions.style.display = 'flex';
@@ -406,6 +407,7 @@ function showRideActionButtons(state){
   if (nextStopBtn) nextStopBtn.style.display = 'none';
   if (tripDoneBtn) tripDoneBtn.style.display = 'none';
   if (addStopMidBtn) addStopMidBtn.style.display = 'none';
+  if (removeStopMidBtn) removeStopMidBtn.style.display = 'none';
   // Show panic button during active ride
   if (panicBtn) panicBtn.style.display = '';
 
@@ -420,6 +422,8 @@ function showRideActionButtons(state){
       if (nextStopBtn) nextStopBtn.style.display = '';
     }
     if (addStopMidBtn) addStopMidBtn.style.display = '';
+    // Show remove button only if there are more than 1 stop
+    if (removeStopMidBtn && stops.length > 1) removeStopMidBtn.style.display = '';
     if (tripDoneBtn) tripDoneBtn.style.display = '';
   }
 }
@@ -1144,46 +1148,137 @@ if (tripDoneBtn) tripDoneBtn.addEventListener('click', async () => {
 
 // ===== Mid-trip Add Stop =====
 const addStopMidBtn = document.getElementById('addStopMidBtn');
+let addStopMapHandler = null; // track active map click handler for cancel
 if (addStopMidBtn) addStopMidBtn.addEventListener('click', () => {
   if (!activeRideKey || !activeRideData || !popupMap) return;
-  addingStopMode = true;
-  setStatus('Tap the map to add a new stop (pan freely)');
-  const onMapClick = async (e) => {
-    popupMap.off('click', onMapClick);
+
+  // Toggle cancel: if already in add-stop mode, cancel it
+  if (addingStopMode && addStopMapHandler) {
+    popupMap.off('click', addStopMapHandler);
+    addStopMapHandler = null;
     addingStopMode = false;
+    addStopMidBtn.textContent = 'Add Stop';
+    addStopMidBtn.classList.remove('ride-action-btn--cancel');
+    setStatus('Add stop cancelled');
+    return;
+  }
+
+  addingStopMode = true;
+  addStopMidBtn.textContent = 'Cancel';
+  addStopMidBtn.classList.add('ride-action-btn--cancel');
+  setStatus('Tap the map to add a new stop (tap Cancel to abort)');
+
+  addStopMapHandler = async (e) => {
+    popupMap.off('click', addStopMapHandler);
+    addStopMapHandler = null;
+    addingStopMode = false;
+    addStopMidBtn.textContent = 'Add Stop';
+    addStopMidBtn.classList.remove('ride-action-btn--cancel');
+
     const newStop = { lat: e.latlng.lat, lng: e.latlng.lng };
     // Insert as the next stop after currentStopIndex
     if (!activeRideData.stops) activeRideData.stops = [];
     const insertIdx = currentStopIndex + 1;
     activeRideData.stops.splice(insertIdx, 0, newStop);
-    // Update Firebase with new stops array
+
+    // Recalculate total price
+    const pp = activeRideData.pricePerPerson || 0;
+    const pax = activeRideData.passengers || 1;
+    const newStopCount = activeRideData.stops.length;
+    const newTotal = pp * pax * newStopCount;
+    activeRideData.totalPrice = newTotal;
+
+    // Update Firebase with new stops + recalculated price
     try {
-      await update(ref(db, 'ride_requests/' + activeRideKey), { stops: activeRideData.stops });
-      // Add a marker for the new stop
-      const icon = L.divIcon({
-        className: 'stop-number-icon',
-        html: `<div style="background:#ff9500;color:#fff;width:24px;height:24px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;border:2px solid #fff;box-shadow:0 2px 6px rgba(0,0,0,0.3)">+</div>`,
-        iconSize: [24, 24],
-        iconAnchor: [12, 12]
+      await update(ref(db, 'ride_requests/' + activeRideKey), {
+        stops: activeRideData.stops,
+        totalPrice: newTotal
       });
-      const m = L.marker([newStop.lat, newStop.lng], { icon }).addTo(popupMap).bindPopup('Added stop');
-      popupStopMarkers.push(m);
+      // Re-render all stop markers with sequential numbering
+      refreshStopMarkers();
       // Re-route navigation
       lastNavFetchTime = 0;
       lastNavLatLng = null;
       await updateNavigation();
       showRideActionButtons('picked_up');
       saveActiveRide();
-      setStatus('Stop added');
+      setStatus(`Stop added — navigating to stop ${currentStopIndex + 1} of ${newStopCount} · Total: R${newTotal}`);
     } catch(err) {
       console.error('Failed to add stop', err);
       activeRideData.stops.splice(insertIdx, 1); // revert
+      activeRideData.totalPrice = pp * pax * activeRideData.stops.length; // revert price
       addingStopMode = false;
       setStatus('Failed to add stop');
     }
   };
-  popupMap.once('click', onMapClick);
+  popupMap.once('click', addStopMapHandler);
 });
+
+// ===== Mid-trip Remove Last Stop =====
+const removeStopMidBtn = document.getElementById('removeStopMidBtn');
+if (removeStopMidBtn) removeStopMidBtn.addEventListener('click', async () => {
+  if (!activeRideKey || !activeRideData) return;
+  const stops = activeRideData.stops && Array.isArray(activeRideData.stops) ? activeRideData.stops : [];
+  if (stops.length <= 1) {
+    setStatus('Cannot remove the only stop');
+    return;
+  }
+  // Remove the last stop in the array
+  stops.pop();
+  // If currentStopIndex is now beyond the array, adjust it
+  if (currentStopIndex >= stops.length) {
+    currentStopIndex = Math.max(0, stops.length - 1);
+  }
+
+  // Recalculate total price
+  const pp = activeRideData.pricePerPerson || 0;
+  const pax = activeRideData.passengers || 1;
+  const newTotal = pp * pax * stops.length;
+  activeRideData.totalPrice = newTotal;
+
+  try {
+    await update(ref(db, 'ride_requests/' + activeRideKey), {
+      stops: stops,
+      totalPrice: newTotal,
+      currentStop: currentStopIndex
+    });
+    // Re-render stop markers
+    refreshStopMarkers();
+    // Re-route navigation
+    lastNavFetchTime = 0;
+    lastNavLatLng = null;
+    await updateNavigation();
+    showRideActionButtons('picked_up');
+    saveActiveRide();
+    setStatus(`Last stop removed · ${stops.length} stop${stops.length !== 1 ? 's' : ''} remaining · Total: R${newTotal}`);
+  } catch(err) {
+    console.error('Failed to remove stop', err);
+    setStatus('Failed to remove stop');
+  }
+});
+
+// Re-render all stop markers on the popup map with sequential numbering
+function refreshStopMarkers(){
+  // Remove existing markers
+  if (popupStopMarkers && popupStopMarkers.length) {
+    popupStopMarkers.forEach(m => { try { popupMap.removeLayer(m); } catch(e){} });
+  }
+  popupStopMarkers = [];
+  if (!activeRideData || !activeRideData.stops || !popupMap) return;
+  activeRideData.stops.forEach((s, i) => {
+    const isCurrent = (i === currentStopIndex);
+    const isPast = (i < currentStopIndex);
+    const bgColor = isPast ? '#666' : (isCurrent ? '#00c853' : '#ff9500');
+    const icon = L.divIcon({
+      className: 'stop-number-icon',
+      html: `<div style="background:${bgColor};color:#fff;width:24px;height:24px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;border:2px solid #fff;box-shadow:0 2px 6px rgba(0,0,0,0.3)">${i + 1}</div>`,
+      iconSize: [24, 24],
+      iconAnchor: [12, 12]
+    });
+    const m = L.marker([s.lat, s.lng], { icon }).addTo(popupMap).bindPopup(`Stop ${i + 1}`);
+    popupStopMarkers.push(m);
+  });
+}
 
 // ===== Panic Button (3-second long press) =====
 const panicBtnEl = document.getElementById('panicBtn');
