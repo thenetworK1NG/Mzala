@@ -413,18 +413,18 @@ function showRideActionButtons(state){
 
   if (state === 'accepted') {
     // Driver has accepted but hasn't picked up yet — show "Picked Up"
-    if (pickedUpBtn) pickedUpBtn.style.display = '';
+    if (pickedUpBtn) pickedUpBtn.style.display = 'flex';
   } else if (state === 'picked_up') {
     // Ride in progress — show navigation controls
     const stops = activeRideData && activeRideData.stops ? activeRideData.stops : [];
     const hasMoreStops = stops.length > 1 && currentStopIndex < stops.length - 1;
     if (hasMoreStops) {
-      if (nextStopBtn) nextStopBtn.style.display = '';
+      if (nextStopBtn) nextStopBtn.style.display = 'flex';
     }
-    if (addStopMidBtn) addStopMidBtn.style.display = '';
+    if (addStopMidBtn) addStopMidBtn.style.display = 'flex';
     // Show remove button only if there are more than 1 stop
-    if (removeStopMidBtn && stops.length > 1) removeStopMidBtn.style.display = '';
-    if (tripDoneBtn) tripDoneBtn.style.display = '';
+    if (removeStopMidBtn && stops.length > 1) removeStopMidBtn.style.display = 'flex';
+    if (tripDoneBtn) tripDoneBtn.style.display = 'flex';
   }
 }
 
